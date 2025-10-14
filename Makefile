@@ -6,7 +6,7 @@ OBJ = srv.o server.o request.o mime.o list.o hashmap.o
 %.o: %.c $(DEPS)
 	$(CC) -c -o $@ $< $(CFLAGS)
 
-srv: $(OBJ)
+srvd: $(OBJ)
 	$(CC) -o $@ $^ $(CFLAGS)
 
 .PHONY: clean
