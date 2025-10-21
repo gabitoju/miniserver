@@ -38,8 +38,11 @@ int server_init(Server * server) {
     struct linger linger_opt = { 1, 0 };  // Enable linger with timeout 0
 
     // Set socket options to allow immediate reuse of the address/port (this allows for faster shutdown)
-    setsockopt(server->fd, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val));
-    setsockopt(server->fd, SOL_SOCKET, SO_REUSEPORT, &val, sizeof(val));
+    #ifdef SO_REUSEPORT
+        setsockopt(server->fd, SOL_SOCKET, SO_REUSEPORT, &val, sizeof(val));
+    #else
+        setsockopt(server->fd, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val));
+    #endif
     // Set linger to force close the connection immediately (this allows for faster shutdown)
     setsockopt(server->fd, SOL_SOCKET, SO_LINGER, &linger_opt, sizeof(linger_opt));
 
