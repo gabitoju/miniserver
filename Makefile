@@ -1,5 +1,5 @@
 CC ?= gcc
-CFLAGS ?= -Wall -Wextra -std=c11 -g
+CFLAGS ?= -Wall -Wextra -std=gnu17 -g
 CPPFLAGS ?=
 LDFLAGS ?=
 DEPS = server.h request.h constants.h mime.h list.h hashmap.h
