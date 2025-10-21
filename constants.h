@@ -9,4 +9,7 @@
 #define HTML_CONTENT_TYPE "text/html"
 #define WELCOME_MESSAGE "<b>Welcome to this little HTTP sever</b>"
 
+#define INDEX "index.html"
+#define INDEX_SLASH "/index.html"
+
 #endif //CONSTANTS

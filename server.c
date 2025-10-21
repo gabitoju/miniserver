@@ -16,11 +16,14 @@
 
 volatile sig_atomic_t server_running = 1;
 
+void close_socket(int socket_fd);
+
 void int_handler(int dummy) {
     (void)dummy;
     printf("Handler");
     server_running = 0;
 }
+
 
 int server_init(Server * server) {
     if ((server->fd = socket(AF_INET, SOCK_STREAM, 0)) ==  0) {
@@ -32,8 +35,13 @@ int server_init(Server * server) {
     server->address.sin_addr.s_addr = INADDR_ANY;
     server->address.sin_port = htons(server->port);
     int val = 1;
+    struct linger linger_opt = { 1, 0 };  // Enable linger with timeout 0
 
+    // Set socket options to allow immediate reuse of the address/port (this allows for faster shutdown)
     setsockopt(server->fd, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val));
+    setsockopt(server->fd, SOL_SOCKET, SO_REUSEPORT, &val, sizeof(val));
+    // Set linger to force close the connection immediately (this allows for faster shutdown)
+    setsockopt(server->fd, SOL_SOCKET, SO_LINGER, &linger_opt, sizeof(linger_opt));
 
     if ((bind(server->fd, (struct sockaddr*)&server->address, sizeof(server->address))) < 0) {
         perror("bind failed");
@@ -82,15 +90,36 @@ void server_run(Server* server) {
 void server_destroy(Server* server) {
     free(server->content_path);
     mime_destroy();
+    close(server->fd);
 }
 
 void handle_connection(Server* server, int client_socket) {
     char buffer[BUFFER_SIZE] = {0};
-    read(client_socket, buffer, BUFFER_SIZE);
+    size_t total_received = 0;
+    size_t remaining = 0;
+    while (total_received < BUFFER_SIZE) {
+        remaining = BUFFER_SIZE - total_received;
+        ssize_t bytes_received = recv(client_socket,
+                                     buffer + total_received,
+                                     remaining,
+                                     0);
+
+        if (bytes_received <= 0) {
+            close_socket(client_socket);
+            return;
+        }
+
+        total_received += (size_t)bytes_received;
+
+        if ((size_t)bytes_received < remaining) {
+            break;
+        }
+    }
+
     Request request = parse_request(buffer);
 
     if (request.method == NULL) {
-        close(client_socket);
+        close_socket(client_socket);
         return;
     }
 
@@ -98,7 +127,7 @@ void handle_connection(Server* server, int client_socket) {
 
     log_request(&request);
     free_request(&request);
-    close(client_socket);
+    close_socket(client_socket);
 }
 
 void handle_request(Server* server, Request *request, int client_socket) {
@@ -128,7 +157,7 @@ void send_file_response(Server* server, Request* request, int client_socket, con
     char full_path[BUFFER_SIZE];
 
     if (strcmp(url_path, "/") == 0) {
-        snprintf(full_path, sizeof(full_path), "%s/index.html", server->content_path);
+        snprintf(full_path, sizeof(full_path), "%s/%s", server->content_path, INDEX);
     } else {
         snprintf(full_path, sizeof(full_path), "%s%s", server->content_path, url_path);
     }
@@ -149,7 +178,7 @@ void send_file_response(Server* server, Request* request, int client_socket, con
             send_301_redirect(request, client_socket, new_location);
             return;
         } else {
-            strncat(full_path, "/index.html", sizeof(full_path)- strlen(full_path) - 1);
+            strncat(full_path, INDEX_SLASH, sizeof(full_path)- strlen(full_path) - 1);
         }
     }
 
@@ -229,4 +258,11 @@ void log_request(Request* request) {
         request->referer ? request->referer : "-",
         request->user_agent ? request->user_agent : "unknown"
     );
+}
+
+void close_socket(int socket_fd) {
+    if (socket_fd >= 0) {
+        shutdown(socket_fd, SHUT_RDWR);
+        close(socket_fd);
+    }
 }

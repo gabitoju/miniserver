@@ -12,4 +12,4 @@ srvd: $(OBJ)
 .PHONY: clean
 
 clean:
-	rm -f $(OBJ) srv
+	rm -f $(OBJ) srvd
