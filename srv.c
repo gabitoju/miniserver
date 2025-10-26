@@ -2,9 +2,10 @@
 #include "constants.h"
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 void read_config(Server* server) {
-    FILE* file = fopen(CONFIG_FILE, "r");
+    FILE* file = fopen(server->config_file, "r");
 
     if (file == NULL) {
         server->port = DEFAULT_PORT;
@@ -40,12 +41,24 @@ void read_config(Server* server) {
 
 }
 
-int main(void) {
+int main(int argc, char* argv[]) {
 
     Server server = {
         .port = DEFAULT_PORT,
-        .content_path = "."
+        .content_path = ".",
+        .config_file = CONFIG_FILE 
     };
+    char c;
+
+    while ((c = getopt(argc, argv, "c:")) != -1) {
+        switch (c) {
+            case 'c':
+                server.config_file = optarg;
+                break;
+        }
+    }
+
+    printf("%s\n", server.config_file);
 
     read_config(&server);
 

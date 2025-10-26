@@ -1,7 +1,7 @@
 #ifndef CONSTANTS
 #define CONSTANTS
 
-#define CONFIG_FILE "server.conf"
+#define CONFIG_FILE "/etc/gabitojusrv/server.conf"
 #define DEFAULT_PORT 8080
 
 #define BUFFER_SIZE 1024

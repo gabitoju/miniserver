@@ -11,6 +11,7 @@ typedef struct {
     int port;
     struct sockaddr_in address;
     char* content_path;
+    char* config_file;
 } Server;
 
 int server_init(Server* server);
