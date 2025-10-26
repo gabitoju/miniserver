@@ -123,6 +123,7 @@ void handle_connection(Server* server, int client_socket) {
 
     if (request.method == NULL) {
         close_socket(client_socket);
+        free_request(&request);
         return;
     }
 
