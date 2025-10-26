@@ -135,7 +135,20 @@ void handle_connection(Server* server, int client_socket) {
 }
 
 void handle_request(Server* server, Request *request, int client_socket) {
-    send_file_response(server, request, client_socket, request->path);
+    if (strcmp(request->method, HTTP_GET) == 0 || strcmp(request->method, HTTP_HEAD) == 0) {
+        send_file_response(server, request, client_socket, request->path);
+        return;
+    }
+    send_405_response(request, client_socket);
+}
+
+void send_403_response(Request* request, int client_socket) {
+    char response[BUFFER_SIZE];
+    char* message = "403 FORBIDDEN";
+    sprintf(response, "%s 403 FORBIDDEN\nContent-Type: text/plain\nContent-Length: %zu\n\n%s", HTTP_VERSION, strlen(message), message);
+    request->status = 403;
+    request->bytes = strlen(message);
+    write(client_socket, response, strlen(response));
 }
 
 void send_404_response(Request* request, int client_socket) {
@@ -147,14 +160,16 @@ void send_404_response(Request* request, int client_socket) {
     write(client_socket, response, strlen(response));
 }
 
-void send_403_response(Request* request, int client_socket) {
+
+void send_405_response(Request *request, int client_socket) {
     char response[BUFFER_SIZE];
-    char* message = "403 FORBIDDEN";
-    sprintf(response, "%s 403 FORBIDDEN\nContent-Type: text/plain\nContent-Length: %zu\n\n%s", HTTP_VERSION, strlen(message), message);
-    request->status = 403;
+    char* message = "405 METHOD NOT ALLOWED";
+    sprintf(response, "%s 405 METHOD NOT ALLOWED\nALLOW:%s,%s\nContent-Type: text/plain\nContent-Length: %zu\n\n%s", HTTP_VERSION, HTTP_GET, HTTP_HEAD, strlen(message), message);
+    request->status = 405;
     request->bytes = strlen(message);
     write(client_socket, response, strlen(response));
 }
+
 
 void send_file_response(Server* server, Request* request, int client_socket, const char* url_path) {
 
@@ -231,7 +246,9 @@ void send_file_response(Server* server, Request* request, int client_socket, con
     request->status = 200;
     request->bytes = file_size;
     write(client_socket, response_header, strlen(response_header));
-    write(client_socket, file_content, file_size);
+    if (strcmp(request->method, HTTP_GET) == 0) {
+        write(client_socket, file_content, file_size);
+    }
 
     free(file_content);
 }

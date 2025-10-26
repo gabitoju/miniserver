@@ -23,8 +23,9 @@ void log_request(Request *request);
 
 char* process_file(FILE *file);
 void send_file_response(Server* server, Request* request, int client_socket, const char* file_path);
-void send_404_response(Request* request, int client_socket);
-void send_403_response(Request* request, int client_socket);
 void send_301_redirect(Request* request, int client_socket, const char* new_location);
+void send_403_response(Request* request, int client_socket);
+void send_404_response(Request* request, int client_socket);
+void send_405_response(Request* request, int client_socket);
 
 #endif // SERVER

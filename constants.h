@@ -12,4 +12,8 @@
 #define INDEX "index.html"
 #define INDEX_SLASH "/index.html"
 
+#define HTTP_GET "GET"
+#define HTTP_HEAD "HEAD"
+
+
 #endif //CONSTANTS
