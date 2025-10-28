@@ -1,6 +1,7 @@
 #include "constants.h"
 #include "server.h"
 #include <errno.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,6 +17,7 @@
 
 volatile sig_atomic_t server_running = 1;
 
+int send_all(int socket_fd, const char* buffer, size_t len);
 void close_socket(int socket_fd);
 
 void int_handler(int dummy) {
@@ -79,7 +81,7 @@ void server_run(Server* server) {
 
     while (server_running) {
         if ((new_socket = accept(server->fd, (struct sockaddr*)&server->address, &addrlen)) < 0) {
-            if (errno == EINTR && !server_running) {
+            if (!server_running) {
                 break;
             }
             perror("accept failed");
@@ -148,7 +150,10 @@ void send_403_response(Request* request, int client_socket) {
     sprintf(response, "%s 403 FORBIDDEN\nContent-Type: text/plain\nContent-Length: %zu\n\n%s", HTTP_VERSION, strlen(message), message);
     request->status = 403;
     request->bytes = strlen(message);
-    write(client_socket, response, strlen(response));
+
+    if (send_all(client_socket, response, strlen(response)) == -1) {
+        fprintf(stderr, "Error sending 403 response.\n");
+    }
 }
 
 void send_404_response(Request* request, int client_socket) {
@@ -157,7 +162,10 @@ void send_404_response(Request* request, int client_socket) {
     sprintf(response, "%s 404 NOT FOUND\nContent-Type: text/plain\nContent-Length: %zu\n\n%s", HTTP_VERSION, strlen(message), message);
     request->status = 404;
     request->bytes = strlen(message);
-    write(client_socket, response, strlen(response));
+
+    if (send_all(client_socket, response, strlen(response)) == -1) {
+        fprintf(stderr, "Error sending 404 response.\n");
+    }
 }
 
 
@@ -167,12 +175,19 @@ void send_405_response(Request *request, int client_socket) {
     sprintf(response, "%s 405 METHOD NOT ALLOWED\nALLOW:%s,%s\nContent-Type: text/plain\nContent-Length: %zu\n\n%s", HTTP_VERSION, HTTP_GET, HTTP_HEAD, strlen(message), message);
     request->status = 405;
     request->bytes = strlen(message);
-    write(client_socket, response, strlen(response));
+
+    if (send_all(client_socket, response, strlen(response)) == -1) {
+        fprintf(stderr, "Error sending 405 response.\n");
+    }
 }
 
 
 void send_file_response(Server* server, Request* request, int client_socket, const char* url_path) {
 
+    if (strstr(url_path, "/../") != NULL) {
+        send_403_response(request, client_socket);
+        return;
+    }
     char full_path[BUFFER_SIZE];
 
     if (strcmp(url_path, "/") == 0) {
@@ -245,9 +260,17 @@ void send_file_response(Server* server, Request* request, int client_socket, con
     sprintf(response_header, "%s 200 OK\nContent-Type: %s\nContent-Length: %ld\n\n", HTTP_VERSION, file_type, file_size);
     request->status = 200;
     request->bytes = file_size;
-    write(client_socket, response_header, strlen(response_header));
+
+
+    if (send_all(client_socket, response_header, strlen(response_header)) == -1) {
+        fprintf(stderr, "Error sending file response.\n");
+    }
+
     if (strcmp(request->method, HTTP_GET) == 0) {
-        write(client_socket, file_content, file_size);
+
+        if (send_all(client_socket, file_content, file_size) == -1) {
+            fprintf(stderr, "Error sending file response.\n");
+        }
     }
 
     free(file_content);
@@ -260,7 +283,35 @@ void send_301_redirect(Request *request, int client_socket, const char *new_loca
     request->status = 301;
     request->bytes = 0;
 
-    write(client_socket, response, strlen(response));
+    if (send_all(client_socket, response, strlen(response)) == -1) {
+        fprintf(stderr, "Error sending 301 response.\n");
+    }
+}
+
+int send_all(int socket_fd, const char* buffer, size_t len) {
+    size_t total_sent = 0;
+    ssize_t bytes_sent;
+
+    while (total_sent < len) {
+        bytes_sent = write(socket_fd, buffer + total_sent, len - total_sent);
+
+        if (bytes_sent == -1) {
+            if (errno == EINTR) {
+                continue;
+            } else {
+                perror("write failed in send_all");
+                return -1;
+            }
+        }
+
+        if (bytes_sent == 0 && len - total_sent > 0) {
+            fprintf(stderr, "send_all: Peer closed connection unexpectedly.\n");
+            return -1;
+        }
+
+        total_sent += (size_t)bytes_sent;
+    }
+    return 0;
 }
 
 void log_request(Request* request) {
