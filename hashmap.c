@@ -66,7 +66,6 @@ void hashmap_destroy(HashMap *hash_map) {
             while (bucket != NULL) {
                 Bucket* next = bucket->next;
                 free((void*)bucket->key);
-                free(bucket->value);
                 free(bucket);
                 bucket = next;
             }
