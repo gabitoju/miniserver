@@ -249,14 +249,6 @@ void send_file_response(Server* server, Request* request, int client_socket, con
     long file_size = ftell(file);
     fseek(file, 0, SEEK_SET);
 
-    char* file_content = malloc(file_size);
-    if (file_content == NULL) {
-        fclose(file);
-        return;
-    }
-    fread(file_content, 1, file_size, file);
-    fclose(file);
-
     char response_header[BUFFER_SIZE];
     sprintf(response_header, "%s 200 OK\nContent-Type: %s\nContent-Length: %ld\n\n", HTTP_VERSION, file_type, file_size);
     request->status = 200;
@@ -268,13 +260,16 @@ void send_file_response(Server* server, Request* request, int client_socket, con
     }
 
     if (strcmp(request->method, HTTP_GET) == 0) {
-
-        if (send_all(client_socket, file_content, file_size) == -1) {
-            fprintf(stderr, "Error sending file response.\n");
+        char buffer[BUFFER_SIZE];
+        size_t bytes_read;
+        while ((bytes_read = fread(buffer, 1, BUFFER_SIZE, file)) > 0) {
+            if (send_all(client_socket, buffer, bytes_read) == -1) {
+                fprintf(stderr, "Error sending file response.\n");
+                break;
+            }
         }
     }
 
-    free(file_content);
 }
 
 void send_301_redirect(Request *request, int client_socket, const char *new_location) {
