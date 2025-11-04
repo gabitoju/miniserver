@@ -29,11 +29,27 @@ Request parse_request(char* raw_request) {
 
     char* path_str = strtok_r(NULL, " ", &request_line);
     if (path_str) {
-        req.path = malloc(MAX_PATH_SIZE);
-        if (req.path) {
-            strncpy(req.path, path_str, MAX_PATH_SIZE - 1);
+        char* query_start = strchr(path_str, '?');
+
+        if (query_start != NULL) {
+            size_t path_len = query_start - path_str;
+            req.path = malloc(path_len + 1);
+            if (req.path) {
+                strncpy(req.path, path_str, path_len);
+                req.path[path_len] = '\0';
+            }
+
+            char* query_str = query_start + 1;
+            req.query_params = malloc(strlen(query_str) + 1);
+            if (req.query_params) {
+                strcpy(req.query_params, query_str);
+            }
+        } else {
+            req.path = malloc(strlen(path_str) + 1);
+            if (req.path) {
+                strcpy(req.path, path_str);
+            }
         }
-        req.path[MAX_PATH_SIZE - 1] = '\0';
     }
 
     char* version_str = strtok_r(NULL, " ", &request_line);
@@ -85,4 +101,5 @@ void free_request(Request *request) {
     free(request->user_agent);
     free(request->referer);
     free(request->if_none_match);
+    free(request->query_params);
 }
