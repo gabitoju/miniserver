@@ -330,7 +330,6 @@ void log_request(Request* request) {
 
 void close_socket(int socket_fd) {
     if (socket_fd >= 0) {
-        shutdown(socket_fd, SHUT_RDWR);
         close(socket_fd);
     }
 }
