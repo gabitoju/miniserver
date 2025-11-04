@@ -15,5 +15,6 @@
 #define HTTP_GET "GET"
 #define HTTP_HEAD "HEAD"
 
+#define MIME_TYPES_DATABASE "/etc/gabitojusrv/mime.types"
 
 #endif //CONSTANTS

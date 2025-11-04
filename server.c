@@ -58,7 +58,7 @@ int server_init(Server * server) {
         return -1;
     }
 
-    load_mime_database();
+    load_mime_database(server->mime_types_path);
 
     printf("Server listening on port %d\n", server->port);
     return 0;
@@ -94,6 +94,7 @@ void server_run(Server* server) {
 
 void server_destroy(Server* server) {
     free(server->content_path);
+    free(server->mime_types_path);
     mime_destroy();
     close(server->fd);
 }

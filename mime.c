@@ -6,8 +6,8 @@
 
 HashMap* mime_types;
 
-void load_mime_database() {
-    FILE* mime_db = fopen("mime.types", "r");
+void load_mime_database(char* mime_types_path) {
+    FILE* mime_db = fopen(mime_types_path, "r");
     char line_buffer[BUFFER_SIZE];
 
     if (mime_db == NULL) {

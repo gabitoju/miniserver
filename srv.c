@@ -34,6 +34,12 @@ void read_config(Server* server) {
                         strcpy(server->content_path, svalue);
                     }
                 }
+                if (strcmp(key, "mime_types_path") == 0) {
+                    server->mime_types_path = malloc(strlen(svalue) + 1);
+                    if (server->mime_types_path) {
+                        strcpy(server->mime_types_path, svalue);
+                    }
+                }
             }
         }
         fclose(file);
@@ -46,7 +52,8 @@ int main(int argc, char* argv[]) {
     Server server = {
         .port = DEFAULT_PORT,
         .content_path = ".",
-        .config_file = CONFIG_FILE 
+        .config_file = CONFIG_FILE,
+        .mime_types_path = MIME_TYPES_DATABASE
     };
     char c;
 

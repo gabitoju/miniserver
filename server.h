@@ -12,6 +12,7 @@ typedef struct {
     struct sockaddr_in address;
     char* content_path;
     char* config_file;
+    char* mime_types_path;
 } Server;
 
 int server_init(Server* server);
