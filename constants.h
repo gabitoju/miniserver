@@ -17,4 +17,7 @@
 
 #define MIME_TYPES_DATABASE "/etc/gabitojusrv/mime.types"
 
+#define ACCESS_LOG_PATH "/var/log/gabitojusrv/access.log"
+#define ERROR_LOG_PATH "/var/log/gabitojusrv/error.log"
+
 #endif //CONSTANTS

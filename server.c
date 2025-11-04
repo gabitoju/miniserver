@@ -10,6 +10,7 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <time.h>
+#include "log.h"
 #include "request.h"
 #include "mime.h"
 
@@ -60,6 +61,9 @@ int server_init(Server * server) {
 
     load_mime_database(server->mime_types_path);
 
+    server->access_log_file = fopen(server->access_log_path, "a");
+    server->error_log_file = fopen(server->error_log_path, "a");
+
     printf("Server listening on port %d\n", server->port);
     return 0;
 }
@@ -97,6 +101,8 @@ void server_destroy(Server* server) {
     free(server->mime_types_path);
     mime_destroy();
     close(server->fd);
+    fclose(server->access_log_file);
+    fclose(server->error_log_file);
 }
 
 void handle_connection(Server* server, int client_socket) {
@@ -132,7 +138,7 @@ void handle_connection(Server* server, int client_socket) {
 
     handle_request(server, &request, client_socket);
 
-    log_request(&request);
+    log_access_request(server, &request);
     free_request(&request);
     close_socket(client_socket);
 }

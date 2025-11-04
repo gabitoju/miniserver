@@ -40,6 +40,18 @@ void read_config(Server* server) {
                         strcpy(server->mime_types_path, svalue);
                     }
                 }
+                if (strcmp(key, "access_log_path") == 0) {
+                    server->access_log_path = malloc(strlen(svalue) + 1);
+                    if (server->access_log_path) {
+                        strcpy(server->access_log_path, svalue);
+                    }
+                }
+                if (strcmp(key, "error_log_path") == 0) {
+                    server->error_log_path = malloc(strlen(svalue) + 1);
+                    if (server->error_log_path) {
+                        strcpy(server->error_log_path, svalue);
+                    }
+                }
             }
         }
         fclose(file);
@@ -53,7 +65,9 @@ int main(int argc, char* argv[]) {
         .port = DEFAULT_PORT,
         .content_path = ".",
         .config_file = CONFIG_FILE,
-        .mime_types_path = MIME_TYPES_DATABASE
+        .mime_types_path = MIME_TYPES_DATABASE,
+        .access_log_path = ACCESS_LOG_PATH,
+        .error_log_path = ERROR_LOG_PATH
     };
     char c;
 

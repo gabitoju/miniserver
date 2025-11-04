@@ -13,6 +13,10 @@ typedef struct {
     char* content_path;
     char* config_file;
     char* mime_types_path;
+    char* access_log_path;
+    char* error_log_path;
+    FILE* access_log_file;
+    FILE* error_log_file;
 } Server;
 
 int server_init(Server* server);

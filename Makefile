@@ -2,8 +2,8 @@ CC ?= gcc
 CFLAGS ?= -Wall -Wextra -std=gnu17 -g
 CPPFLAGS ?=
 LDFLAGS ?=
-DEPS = server.h request.h constants.h mime.h list.h hashmap.h
-OBJ = srv.o server.o request.o mime.o list.o hashmap.o
+DEPS = server.h request.h constants.h mime.h list.h hashmap.h log.h
+OBJ = srv.o server.o request.o mime.o list.o hashmap.o log.o
 RM = rm -f
 
 # Build rule
@@ -25,6 +25,7 @@ DESTDIR ?=
 BIN_DIR = $(PREFIX)/bin
 CONF_DIR = /etc/srv
 WEB_DIR = /var/www/srv
+LOG_DIR = /var/log/gabitojusrv
 
 # Installation targets
 install: srvd
@@ -38,6 +39,9 @@ install: srvd
 	@echo "Installing web content to $(DESTDIR)$(WEB_DIR)..."
 	@mkdir -p $(DESTDIR)$(WEB_DIR)
 	@install -m 644 index.html $(DESTDIR)$(WEB_DIR)
+	@echo "Creating log directory $(DESTDIR)$(LOG_DIR)..."
+	@mkdir -p $(DESTDIR)$(LOG_DIR)
+	@chown srvuser:srvuser $(DESTDIR)$(LOG_DIR)
 
 uninstall:
 	@echo "Removing srvd from $(DESTDIR)$(BIN_DIR)..."
