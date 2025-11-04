@@ -52,7 +52,7 @@ Request parse_request(char* raw_request) {
         } else if (strncasecmp(line, "User-Agent: ", 12) == 0) {
             req.user_agent = malloc(MAX_HEADER_SIZE);
             if (req.user_agent) strncpy(req.user_agent, line + 12, MAX_HEADER_SIZE - 1);
-            req.user_agent[MAX_HEADER_SIZE - 1] = '\n';
+            req.user_agent[MAX_HEADER_SIZE - 1] = '\0';
         } else if (strncasecmp(line, "Referer: ", 9) == 0) {
             req.referer = malloc(MAX_HEADER_SIZE);
             if (req.referer) strncpy(req.referer, line + 9, MAX_HEADER_SIZE - 1);
