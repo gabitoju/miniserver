@@ -12,6 +12,7 @@ typedef struct {
     char* host;
     char* user_agent;
     char* referer;
+    char* if_none_match;
     int status;
     size_t bytes;
 } Request;

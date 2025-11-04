@@ -147,8 +147,8 @@ void handle_request(Server* server, Request *request, int client_socket) {
 
 void send_403_response(Request* request, int client_socket) {
     char response[BUFFER_SIZE];
-    char* message = "403 FORBIDDEN";
-    sprintf(response, "%s 403 FORBIDDEN\nContent-Type: text/plain\nContent-Length: %zu\n\n%s", HTTP_VERSION, strlen(message), message);
+    char* message = "403 Forbidden";
+    sprintf(response, "%s 403 Forbidden\nContent-Type: text/plain\nContent-Length: %zu\n\n%s", HTTP_VERSION, strlen(message), message);
     request->status = 403;
     request->bytes = strlen(message);
 
@@ -159,8 +159,8 @@ void send_403_response(Request* request, int client_socket) {
 
 void send_404_response(Request* request, int client_socket) {
     char response[BUFFER_SIZE];
-    char* message = "404 NOT FOUND";
-    sprintf(response, "%s 404 NOT FOUND\nContent-Type: text/plain\nContent-Length: %zu\n\n%s", HTTP_VERSION, strlen(message), message);
+    char* message = "404 Not Found";
+    sprintf(response, "%s 404 Not Found\nContent-Type: text/plain\nContent-Length: %zu\n\n%s", HTTP_VERSION, strlen(message), message);
     request->status = 404;
     request->bytes = strlen(message);
 
@@ -172,8 +172,8 @@ void send_404_response(Request* request, int client_socket) {
 
 void send_405_response(Request *request, int client_socket) {
     char response[BUFFER_SIZE];
-    char* message = "405 METHOD NOT ALLOWED";
-    sprintf(response, "%s 405 METHOD NOT ALLOWED\nALLOW:%s,%s\nContent-Type: text/plain\nContent-Length: %zu\n\n%s", HTTP_VERSION, HTTP_GET, HTTP_HEAD, strlen(message), message);
+    char* message = "405 Method Not Allowed";
+    sprintf(response, "%s 405 Method Not Allowed\nALLOW:%s,%s\nContent-Type: text/plain\nContent-Length: %zu\n\n%s", HTTP_VERSION, HTTP_GET, HTTP_HEAD, strlen(message), message);
     request->status = 405;
     request->bytes = strlen(message);
 
@@ -200,6 +200,14 @@ void send_file_response(Server* server, Request* request, int client_socket, con
     struct stat path_stats;
     if (stat(full_path, &path_stats) != 0) {
         send_404_response(request, client_socket);
+        return;
+    }
+
+    char etag[256];
+    sprintf(etag, "\"%llx-%llx\"", (unsigned long long)path_stats.st_mtime, (unsigned long long)path_stats.st_size);
+
+    if (request->if_none_match != NULL && strcmp(request->if_none_match, etag) == 0) {
+        send_304_not_modified_response(request, client_socket);
         return;
     }
 
@@ -250,7 +258,7 @@ void send_file_response(Server* server, Request* request, int client_socket, con
     fseek(file, 0, SEEK_SET);
 
     char response_header[BUFFER_SIZE];
-    sprintf(response_header, "%s 200 OK\nContent-Type: %s\nContent-Length: %ld\n\n", HTTP_VERSION, file_type, file_size);
+    sprintf(response_header, "%s 200 OK\nContent-Type: %s\nContent-Length: %ld\nETag: %s\n\n", HTTP_VERSION, file_type, file_size, etag);
     request->status = 200;
     request->bytes = file_size;
 
@@ -274,13 +282,24 @@ void send_file_response(Server* server, Request* request, int client_socket, con
 
 void send_301_redirect(Request *request, int client_socket, const char *new_location) {
     char response[BUFFER_SIZE];
-    sprintf(response, "%s 301 MOVED PERMANENTLY\nLocation:%s\nContent-Length: 0\n\n", HTTP_VERSION, new_location);
+    sprintf(response, "%s 301 Moved Permanently\nLocation:%s\nContent-Length: 0\n\n", HTTP_VERSION, new_location);
 
     request->status = 301;
     request->bytes = 0;
 
     if (send_all(client_socket, response, strlen(response)) == -1) {
         fprintf(stderr, "Error sending 301 response.\n");
+    }
+}
+
+void send_304_not_modified_response(Request *request, int client_socket) {
+    char response[BUFFER_SIZE];
+    sprintf(response, "%s 304 Not Modified\r\n\r\n", HTTP_VERSION);
+    request->status = 304;
+    request->bytes = 0;
+
+    if (send_all(client_socket, response, strlen(response)) == -1) {
+        fprintf(stderr, "Error sending 304 response.\n");
     }
 }
 
@@ -330,16 +349,11 @@ void log_request(Request* request) {
 
 void close_socket(int socket_fd) {
     if (socket_fd >= 0) {
-        // Signal that we are done writing
         shutdown(socket_fd, SHUT_WR);
 
-        // Read and discard any remaining data from the client
         char buffer[BUFFER_SIZE];
-        while (recv(socket_fd, buffer, sizeof(buffer), 0) > 0) {
-            // Keep reading until the client closes the connection
-        }
+        while (recv(socket_fd, buffer, sizeof(buffer), 0) > 0) {}
 
-        // Now it's safe to close the socket
         close(socket_fd);
     }
 }
