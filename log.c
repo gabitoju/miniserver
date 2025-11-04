@@ -35,10 +35,11 @@ void log_access_request(Server *server, Request *request) {
             request->referer ? request->referer : "-",
             request->user_agent ? request->user_agent : "unknown"
         );
+        fflush(server->access_log_file);
     }
 }
 
-void log_error_request(Server *server, const char *error) {
+void log_error(Server *server, const char *error) {
     
     time_t now = time(0);
     char time_buff[100];
@@ -48,5 +49,6 @@ void log_error_request(Server *server, const char *error) {
 
     if (server->error_log_file) {
         fprintf(server->error_log_file, "[%s] %s", time_buff, error);
+        fflush(server->error_log_file);
     }
 }
