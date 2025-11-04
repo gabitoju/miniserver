@@ -330,6 +330,16 @@ void log_request(Request* request) {
 
 void close_socket(int socket_fd) {
     if (socket_fd >= 0) {
+        // Signal that we are done writing
+        shutdown(socket_fd, SHUT_WR);
+
+        // Read and discard any remaining data from the client
+        char buffer[1024];
+        while (recv(socket_fd, buffer, sizeof(buffer), 0) > 0) {
+            // Keep reading until the client closes the connection
+        }
+
+        // Now it's safe to close the socket
         close(socket_fd);
     }
 }
