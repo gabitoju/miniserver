@@ -269,7 +269,7 @@ void send_file_response(Server* server, Request* request, int client_socket, con
             }
         }
     }
-
+    fclose(file);
 }
 
 void send_301_redirect(Request *request, int client_socket, const char *new_location) {
