@@ -334,7 +334,7 @@ void close_socket(int socket_fd) {
         shutdown(socket_fd, SHUT_WR);
 
         // Read and discard any remaining data from the client
-        char buffer[1024];
+        char buffer[BUFFER_SIZE];
         while (recv(socket_fd, buffer, sizeof(buffer), 0) > 0) {
             // Keep reading until the client closes the connection
         }
