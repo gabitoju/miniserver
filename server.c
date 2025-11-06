@@ -8,6 +8,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include <unistd.h>
 #include <time.h>
 #include "log.h"
@@ -92,7 +93,8 @@ void server_run(Server* server) {
             continue;
         }
 
-        handle_connection(server, new_socket);
+        char* client_ip = inet_ntoa(server->address.sin_addr);
+        handle_connection(server, new_socket, client_ip);
     }
 }
 
@@ -105,7 +107,7 @@ void server_destroy(Server* server) {
     fclose(server->error_log_file);
 }
 
-void handle_connection(Server* server, int client_socket) {
+void handle_connection(Server* server, int client_socket, const char* client_ip) {
     char buffer[BUFFER_SIZE] = {0};
     size_t total_received = 0;
     size_t remaining = 0;
@@ -129,6 +131,20 @@ void handle_connection(Server* server, int client_socket) {
     }
 
     Request request = parse_request(buffer);
+
+    if (request.x_forwarded_for) {
+        char* comma = strchr(request.x_forwarded_for, ',');
+        if (comma) {
+            size_t len = comma - request.x_forwarded_for;
+            request.client_ip = malloc(len + 1);
+            strncpy(request.client_ip, request.x_forwarded_for, len);
+            request.client_ip[len] = '\0';
+        } else {
+            request.client_ip = strdup(request.x_forwarded_for);
+        }
+    } else {
+        request.client_ip = client_ip ? strdup(client_ip) : NULL;
+    }
 
     if (request.method == NULL) {
         close_socket(client_socket);

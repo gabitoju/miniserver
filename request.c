@@ -87,6 +87,12 @@ Request parse_request(char* raw_request) {
                 strncpy(req.if_none_match, line + 15, MAX_HEADER_SIZE - 1);
             }
             req.if_none_match[MAX_HEADER_SIZE - 1] = '\0';
+        } else if (strncmp(line, "X-Forwarded-For: ", 17) == 0) {
+            req.x_forwarded_for = malloc(MAX_HEADER_SIZE);
+            if (req.x_forwarded_for) {
+                strncpy(req.x_forwarded_for, line + 17, MAX_HEADER_SIZE - 1);
+            }
+            req.x_forwarded_for[MAX_HEADER_SIZE - 1] = '\0';
         }
     }
 
@@ -102,4 +108,6 @@ void free_request(Request *request) {
     free(request->referer);
     free(request->if_none_match);
     free(request->query_params);
+    free(request->client_ip);
+    free(request->x_forwarded_for);
 }

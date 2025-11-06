@@ -10,6 +10,8 @@ typedef struct {
     char* path;
     char* version;
     char* host;
+    char* client_ip;
+    char* x_forwarded_for;
     char* user_agent;
     char* referer;
     char* if_none_match;

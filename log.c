@@ -11,7 +11,7 @@ void log_access_request(Server *server, Request *request) {
     strftime(time_buff, sizeof(time_buff), "%d/%b/%Y:%H:%M:%S %z", localtime(&now));
 
     printf("%s - - [%s] \"%s %s %s\" %d %zu \"%s\" \"%s\"\n",
-        request->host ? request->host : "unknown",
+        request->client_ip ? request->client_ip : "unknown",
         time_buff,
         request->method,
         request->path,
@@ -25,7 +25,7 @@ void log_access_request(Server *server, Request *request) {
 
     if (server->access_log_file != NULL) {
         fprintf(server->access_log_file, "%s - - [%s] \"%s %s %s\" %d %zu \"%s\" \"%s\"\n",
-            request->host ? request->host : "unknown",
+            request->client_ip ? request->client_ip : "unknown",
             time_buff,
             request->method,
             request->path,

@@ -22,7 +22,7 @@ typedef struct {
 int server_init(Server* server);
 void server_run(Server* server);
 void server_destroy(Server* server);
-void handle_connection(Server* server, int client_socket);
+void handle_connection(Server* server, int client_socket, const char* client_ip);
 void handle_request(Server* server, Request* request, int client_socket);
 void log_request(Request *request);
 
