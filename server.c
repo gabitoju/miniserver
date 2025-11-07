@@ -60,10 +60,10 @@ int server_init(Server * server) {
         return -1;
     }
 
-    load_mime_database(server->mime_types_path);
+    load_mime_database(server->config->mime_types_path);
 
-    server->access_log_file = fopen(server->access_log_path, "a");
-    server->error_log_file = fopen(server->error_log_path, "a");
+    server->access_log_file = fopen(server->config->access_log_path, "a");
+    server->error_log_file = fopen(server->config->error_log_path, "a");
 
     printf("Server listening on port %d\n", server->port);
     return 0;
@@ -99,8 +99,8 @@ void server_run(Server* server) {
 }
 
 void server_destroy(Server* server) {
-    free(server->content_path);
-    free(server->mime_types_path);
+    free(server->config->content_path);
+    free(server->config->mime_types_path);
     mime_destroy();
     close(server->fd);
     fclose(server->access_log_file);
@@ -130,17 +130,17 @@ void handle_connection(Server* server, int client_socket, const char* client_ip)
         }
     }
 
-    Request request = parse_request(buffer);
+    Request request = parse_request(server->config, buffer);
 
-    if (request.x_forwarded_for) {
-        char* comma = strchr(request.x_forwarded_for, ',');
+    if (request.real_ip) {
+        char* comma = strchr(request.real_ip, ',');
         if (comma) {
-            size_t len = comma - request.x_forwarded_for;
+            size_t len = comma - request.real_ip;
             request.client_ip = malloc(len + 1);
-            strncpy(request.client_ip, request.x_forwarded_for, len);
+            strncpy(request.client_ip, request.real_ip, len);
             request.client_ip[len] = '\0';
         } else {
-            request.client_ip = strdup(request.x_forwarded_for);
+            request.client_ip = strdup(request.real_ip);
         }
     } else {
         request.client_ip = client_ip ? strdup(client_ip) : NULL;
@@ -214,9 +214,9 @@ void send_file_response(Server* server, Request* request, int client_socket, con
     char full_path[BUFFER_SIZE];
 
     if (strcmp(url_path, "/") == 0) {
-        snprintf(full_path, sizeof(full_path), "%s/%s", server->content_path, INDEX);
+        snprintf(full_path, sizeof(full_path), "%s/%s", server->config->content_path, INDEX);
     } else {
-        snprintf(full_path, sizeof(full_path), "%s%s", server->content_path, url_path);
+        snprintf(full_path, sizeof(full_path), "%s%s", server->config->content_path, url_path);
     }
 
     struct stat path_stats;
@@ -256,7 +256,7 @@ void send_file_response(Server* server, Request* request, int client_socket, con
     char* real_path = realpath(full_path, NULL);
 
     if (real_path != NULL) {
-        if (strncmp(real_path, server->content_path, strlen(server->content_path)) != 0) {
+        if (strncmp(real_path, server->config->content_path, strlen(server->config->content_path)) != 0) {
             free(real_path);
             fclose(file);
             send_403_response(request, client_socket);

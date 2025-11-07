@@ -2,6 +2,7 @@
 #define SERVER
 
 #include "request.h"
+#include "config.h"
 #include <netinet/in.h>
 #include <stdio.h>
 
@@ -10,11 +11,7 @@ typedef struct {
     int fd;
     int port;
     struct sockaddr_in address;
-    char* content_path;
-    char* config_file;
-    char* mime_types_path;
-    char* access_log_path;
-    char* error_log_path;
+    Config* config;
     FILE* access_log_file;
     FILE* error_log_file;
 } Server;

@@ -20,4 +20,6 @@
 #define ACCESS_LOG_PATH "/var/log/gabitojusrv/access.log"
 #define ERROR_LOG_PATH "/var/log/gabitojusrv/error.log"
 
+#define REAL_IP_HEADER "X-Forward-For"
+
 #endif //CONSTANTS

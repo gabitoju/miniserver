@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 #include <stdlib.h>
-
+#include "config.h"
 
 typedef struct {
     char* method;
@@ -11,7 +11,7 @@ typedef struct {
     char* version;
     char* host;
     char* client_ip;
-    char* x_forwarded_for;
+    char* real_ip;
     char* user_agent;
     char* referer;
     char* if_none_match;
@@ -20,7 +20,7 @@ typedef struct {
     size_t bytes;
 } Request;
 
-Request parse_request(char* raw_request);
+Request parse_request(Config* config, char* raw_request);
 
 void free_request(Request* request);
 

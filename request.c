@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 
 #include "request.h"
+#include "config.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,7 +11,7 @@
 #define MAX_VERSION_SIZE 16
 #define MAX_HEADER_SIZE 1024
 
-Request parse_request(char* raw_request) {
+Request parse_request(Config* config, char* raw_request) {
     Request req = {0}; // Initialize all fields to NULL/0
 
     char* request_line = strtok_r(raw_request, "\r\n", &raw_request);
@@ -62,6 +63,8 @@ Request parse_request(char* raw_request) {
     }
 
     char* line;
+    char header_ip_buffer[256];
+    sprintf(header_ip_buffer, "%s: ", config->real_ip_header);
     while ((line = strtok_r(NULL, "\r\n", &raw_request)) != NULL) {
         if (strncasecmp(line, "Host: ", 6) == 0) {
             req.host = malloc(MAX_HEADER_SIZE);
@@ -87,12 +90,12 @@ Request parse_request(char* raw_request) {
                 strncpy(req.if_none_match, line + 15, MAX_HEADER_SIZE - 1);
             }
             req.if_none_match[MAX_HEADER_SIZE - 1] = '\0';
-        } else if (strncmp(line, "X-Forwarded-For: ", 17) == 0) {
-            req.x_forwarded_for = malloc(MAX_HEADER_SIZE);
-            if (req.x_forwarded_for) {
-                strncpy(req.x_forwarded_for, line + 17, MAX_HEADER_SIZE - 1);
+        } else if (strncasecmp(line, header_ip_buffer, strlen(header_ip_buffer)) == 0) {
+            req.real_ip = malloc(MAX_HEADER_SIZE);
+            if (req.real_ip) {
+                strncpy(req.real_ip, line + strlen(header_ip_buffer), MAX_HEADER_SIZE - 1);
             }
-            req.x_forwarded_for[MAX_HEADER_SIZE - 1] = '\0';
+            req.real_ip[MAX_HEADER_SIZE - 1] = '\0';
         }
     }
 
@@ -109,5 +112,5 @@ void free_request(Request *request) {
     free(request->if_none_match);
     free(request->query_params);
     free(request->client_ip);
-    free(request->x_forwarded_for);
+    free(request->real_ip);
 }
