@@ -1,33 +1,39 @@
 # Gabitoju's miniserver
 
-A simple, single-threaded HTTP/1.1 server written in C. It is designed to serve static files and log requests.
+A simple, single-threaded HTTP/1.1 server written in C. It is designed to be small, fast, and portable between Linux and macOS.
+
+## Features
+
+*   **Efficient File Transfer:** Uses the `sendfile()` system call for high-performance, zero-copy file delivery. A portable wrapper ensures it works on both Linux and macOS/BSD.
+*   **Dynamic IP Detection:** Correctly identifies the original client IP address when running behind a reverse proxy (like Cloudflare or Nginx) by reading a configurable HTTP header (e.g., `CF-Connecting-IP` or `X-Forwarded-For`).
+*   **External Configuration:** All settings are managed via a simple `server.conf` file, including port, content path, and log file locations.
+*   **MIME Type Support:** Dynamically loads MIME types from a `mime.types` file to serve content with the correct `Content-Type` header.
+*   **Logging:** Provides separate, configurable log files for access and error reporting.
+*   **ETag Support:** Generates and validates ETags for cache control, supporting `304 Not Modified` responses.
 
 ## Internals
 
 The server is built with a modular structure.
 
-*   **`srv.c`**: Main entry point. It parses command-line arguments and manages the main server and configuration lifecycle.
-*   **`config.h` / `srv.c`**: Handles configuration. A `Config` struct holds settings loaded from `server.conf`. This includes port, content path, and the header to use for the client's real IP.
-*   **`server.c`**: Core server logic. It initializes the socket, binds to a port, and enters the main `accept()` loop to handle incoming connections. Each connection is passed to `handle_connection`.
-*   **`request.c`**: Responsible for parsing raw HTTP requests. It reads the request line and headers, populating a `Request` struct. It dynamically identifies the client IP by checking for the header specified in the configuration file (e.g., `CF-Connecting-IP`), falling back to the direct connection IP if the header is not present.
+*   **`srv.c`**: Main entry point. Initializes the configuration and the server.
+*   **`config.c` / `config.h`**: Handles loading and parsing the `server.conf` file.
+*   **`server.c`**: Core server logic. It initializes the socket and enters the main `accept()` loop. It contains the `send_file_response` function which uses a portable `sendfile()` wrapper for efficient file delivery.
+*   **`request.c`**: Parses raw HTTP requests and dynamically checks for the client IP header specified in the configuration.
 *   **`log.c`**: Provides functions for access and error logging.
-*   **`mime.c`**: Maps file extensions to MIME types using the `mime.types` file.
+*   **`mime.c` / `hashmap.c`**: Implements a hash map to load and query MIME types from the `mime.types` file.
 
 ## Limitations
 
-This server is a minimalist implementation and has several limitations.
-
-*   **Single-Threaded**: It processes requests sequentially and can only handle one connection at a time. A request for a large file will block all subsequent requests.
-*   **HTTP Only**: Does not support HTTPS/TLS. It should be run behind a reverse proxy (like Nginx or Cloudflare) for SSL termination.
+*   **Single-Threaded**: It processes requests sequentially. A blocking operation (like a slow network connection) will block the entire server.
+*   **HTTP Only**: Does not support HTTPS/TLS. It should be run behind a reverse proxy for SSL termination.
 *   **Limited HTTP Support**: Implements only `GET` and `HEAD` methods.
-*   **IPv4 Only**: The server socket listens only on IPv4 (`AF_INET`). It can log IPv6 addresses passed via a header but cannot accept IPv6 connections directly.
-*   **Basic Security**: Includes basic path traversal checks, but has not been hardened against other vulnerabilities like Slowloris attacks.
+*   **IPv4 Only**: The server socket listens only on IPv4 (`AF_INET`).
 
 ## Installation and Usage
 
 ### Dependencies
 
-*   A C compiler (e.g., `gcc`)
+*   A C compiler (e.g., `gcc` or `clang`)
 *   `make`
 
 ### Compilation
@@ -38,7 +44,7 @@ To compile the server, run `make`:
 make
 ```
 
-This will produce the `srv` executable.
+This will produce the `srvd` executable.
 
 ### Installation
 
@@ -49,12 +55,13 @@ sudo make install
 ```
 
 This command will:
-*   Install the `srv` binary to `/usr/local/bin/`.
-*   Install `server.conf` and `mime.types` to `/etc/gabitojusrv/`.
+*   Install the `srvd` binary to `/usr/local/bin/`.
+*   Install `server.conf` and `mime.types` to `/etc/srv/`.
+*   Create a web directory at `/var/www/srv` and a log directory at `/var/log/gabitojusrv`.
 
 ### Configuration
 
-The server is configured via `/etc/gabitojusrv/server.conf`. The file uses a `key value` format.
+The server is configured via `/etc/srv/server.conf`. The file uses a `key value` format.
 
 **Example `server.conf`:**
 ```
@@ -62,15 +69,14 @@ The server is configured via `/etc/gabitojusrv/server.conf`. The file uses a `ke
 port 8080
 
 # Path to the website content
-content_path /var/www/html
+content_path /var/www/srv
 
 # Path to log files
 access_log_path /var/log/gabitojusrv/access.log
 error_log_path /var/log/gabitojusrv/error.log
 
-# Header for identifying the real client IP when behind a proxy
-# (e.g., "CF-Connecting-IP" for Cloudflare)
-real_ip_header X-Forwarded-For
+# Header for identifying the real client IP
+real_ip_header CF-Connecting-IP
 ```
 
 ### Running the Server
@@ -78,13 +84,13 @@ real_ip_header X-Forwarded-For
 Run the server with the following command:
 
 ```sh
-srv
+srvd
 ```
 
-By default, it will look for the configuration file at `/etc/gabitojusrv/server.conf`.
+By default, it will look for the configuration file at `/etc/srv/server.conf`.
 
 To specify a different configuration file, use the `-c` flag:
 
 ```sh
-srv -c /path/to/your/server.conf
+srvd -c /path/to/your/server.conf
 ```
