@@ -18,6 +18,9 @@
 
 #if defined(__linux__)
 #include <sys/sendfile.h>
+#elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
+#include <sys/uio.h>      // Provides sendfile() on macOS/BSD
+#include <sys/socket.h>
 #endif
 
 volatile sig_atomic_t server_running = 1;
