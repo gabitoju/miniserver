@@ -11,7 +11,7 @@ void read_config(Server* server) {
     FILE* file = fopen(server->config->config_file, "r");
 
     if (file == NULL) {
-        server->port = DEFAULT_PORT;
+        server->config->port = DEFAULT_PORT;
         server->config->content_path = ".";
     } else {
         char buffer[BUFFER_SIZE];
@@ -31,7 +31,7 @@ void read_config(Server* server) {
             
             if ((errno != ERANGE) && (endptr != svalue) && (*endptr == '\0')) {
                 if (strcmp(key, "port") == 0) {
-                    server->port = (int)ivalue;
+                    server->config->port = (int)ivalue;
                 }
             } else {
                 if (strcmp(key, "content_path") == 0) {
@@ -73,6 +73,7 @@ void read_config(Server* server) {
 int main(int argc, char* argv[]) {
 
     Config config = {
+        .port = DEFAULT_PORT,
         .content_path = ".",
         .config_file = CONFIG_FILE,
         .mime_types_path = MIME_TYPES_DATABASE,
@@ -82,7 +83,6 @@ int main(int argc, char* argv[]) {
     };
 
     Server server = {
-        .port = DEFAULT_PORT,
         .config = &config
     };
     char c;

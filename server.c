@@ -37,7 +37,7 @@ int server_init(Server * server) {
 
     server->address.sin_family = AF_INET;
     server->address.sin_addr.s_addr = INADDR_ANY;
-    server->address.sin_port = htons(server->port);
+    server->address.sin_port = htons(server->config->port);
     int val = 1;
     struct linger linger_opt = { 1, 0 };  // Enable linger with timeout 0
 
@@ -65,7 +65,7 @@ int server_init(Server * server) {
     server->access_log_file = fopen(server->config->access_log_path, "a");
     server->error_log_file = fopen(server->config->error_log_path, "a");
 
-    printf("Server listening on port %d\n", server->port);
+    printf("Server listening on port %d\n", server->config->port);
     return 0;
 }
 

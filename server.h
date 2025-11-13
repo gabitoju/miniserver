@@ -9,7 +9,6 @@
 
 typedef struct {
     int fd;
-    int port;
     struct sockaddr_in address;
     Config* config;
     FILE* access_log_file;
