@@ -39,7 +39,6 @@ int server_init(Server * server) {
     server->address.sin_addr.s_addr = INADDR_ANY;
     server->address.sin_port = htons(server->config->port);
     int val = 1;
-    struct linger linger_opt = { 1, 0 };  // Enable linger with timeout 0
     struct timeval tv = { 1, 0 };
     setsockopt(server->fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
@@ -49,8 +48,6 @@ int server_init(Server * server) {
     #else
         setsockopt(server->fd, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val));
     #endif
-    // Set linger to force close the connection immediately (this allows for faster shutdown)
-    setsockopt(server->fd, SOL_SOCKET, SO_LINGER, &linger_opt, sizeof(linger_opt));
 
     if ((bind(server->fd, (struct sockaddr*)&server->address, sizeof(server->address))) < 0) {
         perror("bind failed");
