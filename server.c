@@ -49,6 +49,12 @@ void int_handler(int dummy) {
     server_running = 0;
 }
 
+void sigchld_handler(int s) {
+    (void)s;
+    int saved_errno = errno;
+    while(waitpid(-1, NULL, WNOHANG) > 0);
+    errno = saved_errno;
+}
 
 int server_init(Server * server) {
     if ((server->fd = socket(AF_INET, SOCK_STREAM, 0)) ==  0) {
@@ -91,13 +97,21 @@ int server_init(Server * server) {
 
 void server_run(Server* server) {
 
-    struct sigaction sa;
-    sa.sa_handler = int_handler;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
+    struct sigaction sa_int, sa_chld;
+    sa_int.sa_handler = int_handler;
+    sigemptyset(&sa_int.sa_mask);
+    sa_int.sa_flags = 0;
 
-    if (sigaction(SIGINT, &sa, NULL) == -1) {
-        perror("sigaction failed");
+    if (sigaction(SIGINT, &sa_int, NULL) == -1) {
+        perror("sigaction for SIGINIT failed");
+        return;
+    }
+
+    sa_chld.sa_handler = sigchld_handler;
+    sigemptyset(&sa_chld.sa_mask);
+    sa_chld.sa_flags = SA_RESTART;
+    if (sigaction(SIGCHLD, &sa_chld, NULL) == -1) {
+        perror("sigaction for SIGCHLD failed");
         return;
     }
 
@@ -106,6 +120,9 @@ void server_run(Server* server) {
 
     while (server_running) {
         if ((new_socket = accept(server->fd, (struct sockaddr*)&server->address, &addrlen)) < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
             if (!server_running) {
                 break;
             }
@@ -113,8 +130,22 @@ void server_run(Server* server) {
             continue;
         }
 
-        char* client_ip = inet_ntoa(server->address.sin_addr);
-        handle_connection(server, new_socket, client_ip);
+        pid_t pid = fork();
+
+        if (pid < 0) {
+            perror("fork failed");
+            close(new_socket);
+            continue;
+        } 
+
+        if (pid == 0) {
+            close(server->fd);
+            char* client_ip = inet_ntoa(server->address.sin_addr);
+            handle_connection(server, new_socket, client_ip);
+            exit(0);
+        } else {
+            close(new_socket);
+        }
     }
 }
 
