@@ -15,6 +15,7 @@
 #include "request.h"
 #include "mime.h"
 #include <signal.h>
+#include <sys/wait.h>
 
 #if defined(__linux__)
 #include <sys/sendfile.h>
