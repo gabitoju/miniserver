@@ -370,11 +370,6 @@ void log_request(Request* request) {
 
 void close_socket(int socket_fd) {
     if (socket_fd >= 0) {
-        shutdown(socket_fd, SHUT_WR);
-
-        char buffer[BUFFER_SIZE];
-        while (recv(socket_fd, buffer, sizeof(buffer), 0) > 0) {}
-
         close(socket_fd);
     }
 }
