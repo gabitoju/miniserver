@@ -14,13 +14,31 @@
 #include "log.h"
 #include "request.h"
 #include "mime.h"
-
 #include <signal.h>
+
+#if defined(__linux__)
+#include <sys/sendfile.h>
+#endif
 
 volatile sig_atomic_t server_running = 1;
 
 int send_all(int socket_fd, const char* buffer, size_t len);
 void close_socket(int socket_fd);
+
+ssize_t portable_sendfile(int out_fd, int in_fd, off_t *offset, size_t count) {
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
+    off_t len = count;
+    int result = sendfile(in_fd, out_fd, *offset, &len, NULL, 0);
+    if (result == -1) return -1;
+    *offset += len;
+    return len;
+#elif defined(__linux__)
+    return sendfile(out_fd, in_fd, offset, count);
+#else
+#error "sendfile not supported on this platform"
+#endif
+}
+
 
 void int_handler(int dummy) {
     (void)dummy;
@@ -289,11 +307,22 @@ void send_file_response(Server* server, Request* request, int client_socket, con
     }
 
     if (strcmp(request->method, HTTP_GET) == 0) {
-        char buffer[BUFFER_SIZE];
-        size_t bytes_read;
-        while ((bytes_read = fread(buffer, 1, BUFFER_SIZE, file)) > 0) {
-            if (send_all(client_socket, buffer, bytes_read) == -1) {
-                fprintf(stderr, "Error sending file response.\n");
+        int file_fd = fileno(file);
+        off_t offset = 0;
+        ssize_t total_sent = 0;
+
+        while (total_sent < file_size) {
+            ssize_t sent = portable_sendfile(client_socket, file_fd, &offset, file_size - total_sent);
+
+            if (sent == -1) {
+                perror("sendfile failed");
+                break;
+            }
+
+            total_sent += sent;
+
+            if (sent == 0) {
+                // connection closed or done
                 break;
             }
         }
