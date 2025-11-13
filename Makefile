@@ -3,7 +3,7 @@ CFLAGS ?= -Wall -Wextra -std=gnu17 -g
 CPPFLAGS ?=
 LDFLAGS ?=
 DEPS = server.h request.h constants.h mime.h list.h hashmap.h log.h config.h
-OBJ = srv.o server.o request.o mime.o list.o hashmap.o log.o
+OBJ = srv.o server.o request.o mime.o list.o hashmap.o log.o config.o
 RM = rm -f
 
 # Build rule
