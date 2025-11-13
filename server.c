@@ -40,6 +40,8 @@ int server_init(Server * server) {
     server->address.sin_port = htons(server->config->port);
     int val = 1;
     struct linger linger_opt = { 1, 0 };  // Enable linger with timeout 0
+    struct timeval tv = { 1, 0 };
+    setsockopt(server->fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
     // Set socket options to allow immediate reuse of the address/port (this allows for faster shutdown)
     #ifdef SO_REUSEPORT
@@ -55,7 +57,7 @@ int server_init(Server * server) {
         return -1;
     }
 
-    if ((listen(server->fd, 10)) < 0) {
+    if ((listen(server->fd, SOMAXCONN)) < 0) {
         perror("listen failed");
         return -1;
     }
