@@ -1,6 +1,7 @@
 #include "config.h"
 #include "server.h"
 #include "constants.h"
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,22 +15,25 @@ void read_config(Server* server) {
         server->config->content_path = ".";
     } else {
         char buffer[BUFFER_SIZE];
+        char *saveptr;
         while ((fgets(buffer, BUFFER_SIZE, file)) != NULL) {
 
             if (buffer[0] == '#' || buffer[0] == '\n') {
                 continue;
             }
 
-            char key[64];
-            int ivalue;
-            char svalue[BUFFER_SIZE];
-
-            if (sscanf(buffer, "%s %d", key, &ivalue) == 2) {
+            char* key = strtok_r(buffer, " ", &saveptr);
+            char* svalue = strtok_r(NULL, " ", &saveptr);
+            svalue[strcspn(svalue, "\n")] = 0;
+            char* endptr;
+            errno = 0;
+            long ivalue = strtol(svalue, &endptr, 10);
+            
+            if ((errno != ERANGE) && (endptr != svalue) && (*endptr == '\0')) {
                 if (strcmp(key, "port") == 0) {
-                    server->port = ivalue;
+                    server->port = (int)ivalue;
                 }
-            }
-            if (sscanf(buffer, "%s %s", key, svalue) == 2) {
+            } else {
                 if (strcmp(key, "content_path") == 0) {
                     server->config->content_path = malloc(strlen(svalue) + 1);
                     if (server->config->content_path) {
@@ -64,7 +68,6 @@ void read_config(Server* server) {
         }
         fclose(file);
     }
-
 }
 
 int main(int argc, char* argv[]) {
