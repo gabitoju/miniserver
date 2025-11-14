@@ -67,8 +67,6 @@ int server_init(Server * server) {
     server->address.sin_addr.s_addr = INADDR_ANY;
     server->address.sin_port = htons(server->config->port);
     int val = 1;
-    struct timeval tv = { 1, 0 };
-    setsockopt(server->fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
     // Set socket options to allow immediate reuse of the address/port (this allows for faster shutdown)
     #ifdef SO_REUSEPORT
@@ -160,6 +158,10 @@ void server_destroy(Server* server) {
 }
 
 void handle_connection(Server* server, int client_socket, const char* client_ip) {
+
+    struct timeval tv = { 5, 0 };
+    setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    
     char buffer[BUFFER_SIZE] = {0};
     size_t total_received = 0;
     size_t remaining = 0;
