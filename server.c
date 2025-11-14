@@ -28,6 +28,7 @@ volatile sig_atomic_t server_running = 1;
 
 int send_all(int socket_fd, const char* buffer, size_t len);
 void close_socket(int socket_fd);
+char* connection_header_value(Request* request);
 
 ssize_t portable_sendfile(int out_fd, int in_fd, off_t *offset, size_t count) {
 #if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
@@ -162,54 +163,59 @@ void handle_connection(Server* server, int client_socket, const char* client_ip)
     struct timeval tv = { 5, 0 };
     setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     
-    char buffer[BUFFER_SIZE] = {0};
-    size_t total_received = 0;
-    size_t remaining = 0;
-    while (total_received < BUFFER_SIZE) {
-        remaining = BUFFER_SIZE - total_received;
-        ssize_t bytes_received = recv(client_socket,
-                                     buffer + total_received,
-                                     remaining,
-                                     0);
+    while (1) {
+        char buffer[BUFFER_SIZE] = {0};
+        size_t total_received = 0;
+        size_t remaining = 0;
+        while (total_received < BUFFER_SIZE) {
+            remaining = BUFFER_SIZE - total_received;
+            ssize_t bytes_received = recv(client_socket,
+                                         buffer + total_received,
+                                         remaining,
+                                         0);
 
-        if (bytes_received <= 0) {
+            if (bytes_received <= 0) {
+                close_socket(client_socket);
+                return;
+            }
+
+            total_received += (size_t)bytes_received;
+
+            if ((size_t)bytes_received < remaining) {
+                break;
+            }
+        }
+
+        Request request = parse_request(server->config, buffer);
+
+        if (request.real_ip) {
+            char* comma = strchr(request.real_ip, ',');
+            if (comma) {
+                size_t len = comma - request.real_ip;
+                request.client_ip = malloc(len + 1);
+                strncpy(request.client_ip, request.real_ip, len);
+                request.client_ip[len] = '\0';
+            } else {
+                request.client_ip = strdup(request.real_ip);
+            }
+        } else {
+            request.client_ip = client_ip ? strdup(client_ip) : NULL;
+        }
+
+        if (request.method == NULL) {
             close_socket(client_socket);
+            free_request(&request);
             return;
         }
 
-        total_received += (size_t)bytes_received;
+        handle_request(server, &request, client_socket);
+        log_access_request(server, &request);
+        free_request(&request);
 
-        if ((size_t)bytes_received < remaining) {
+        if (request.close_connection) {
             break;
         }
     }
-
-    Request request = parse_request(server->config, buffer);
-
-    if (request.real_ip) {
-        char* comma = strchr(request.real_ip, ',');
-        if (comma) {
-            size_t len = comma - request.real_ip;
-            request.client_ip = malloc(len + 1);
-            strncpy(request.client_ip, request.real_ip, len);
-            request.client_ip[len] = '\0';
-        } else {
-            request.client_ip = strdup(request.real_ip);
-        }
-    } else {
-        request.client_ip = client_ip ? strdup(client_ip) : NULL;
-    }
-
-    if (request.method == NULL) {
-        close_socket(client_socket);
-        free_request(&request);
-        return;
-    }
-
-    handle_request(server, &request, client_socket);
-
-    log_access_request(server, &request);
-    free_request(&request);
     close_socket(client_socket);
 }
 
@@ -224,7 +230,7 @@ void handle_request(Server* server, Request *request, int client_socket) {
 void send_403_response(Request* request, int client_socket) {
     char response[BUFFER_SIZE];
     char* message = "403 Forbidden";
-    sprintf(response, "%s 403 Forbidden\nContent-Type: text/plain\nContent-Length: %zu\nConnection: close\n\n%s", HTTP_VERSION, strlen(message), message);
+    sprintf(response, "%s 403 Forbidden\nContent-Type: text/plain\nContent-Length: %zu\nConnection: %s\n\n%s", HTTP_VERSION, strlen(message), connection_header_value(request), message);
     request->status = 403;
     request->bytes = strlen(message);
 
@@ -236,7 +242,7 @@ void send_403_response(Request* request, int client_socket) {
 void send_404_response(Request* request, int client_socket) {
     char response[BUFFER_SIZE];
     char* message = "404 Not Found";
-    sprintf(response, "%s 404 Not Found\nContent-Type: text/plain\nContent-Length: %zu\nConnection: close\n\n%s", HTTP_VERSION, strlen(message), message);
+    sprintf(response, "%s 404 Not Found\nContent-Type: text/plain\nContent-Length: %zu\nConnection: %s\n\n%s", HTTP_VERSION, strlen(message), connection_header_value(request), message);
     request->status = 404;
     request->bytes = strlen(message);
 
@@ -245,11 +251,10 @@ void send_404_response(Request* request, int client_socket) {
     }
 }
 
-
 void send_405_response(Request *request, int client_socket) {
     char response[BUFFER_SIZE];
     char* message = "405 Method Not Allowed";
-    sprintf(response, "%s 405 Method Not Allowed\nALLOW:%s,%s\nContent-Type: text/plain\nContent-Length: %zu\nConnection: close\n\n%s", HTTP_VERSION, HTTP_GET, HTTP_HEAD, strlen(message), message);
+    sprintf(response, "%s 405 Method Not Allowed\nALLOW:%s,%s\nContent-Type: text/plain\nContent-Length: %zu\nConnection: %s\n\n%s", HTTP_VERSION, HTTP_GET, HTTP_HEAD, strlen(message), connection_header_value(request), message);
     request->status = 405;
     request->bytes = strlen(message);
 
@@ -334,7 +339,7 @@ void send_file_response(Server* server, Request* request, int client_socket, con
     fseek(file, 0, SEEK_SET);
 
     char response_header[BUFFER_SIZE];
-    sprintf(response_header, "%s 200 OK\nContent-Type: %s\nContent-Length: %ld\nETag: %s\nConnection: close\n\n", HTTP_VERSION, file_type, file_size, etag);
+    sprintf(response_header, "%s 200 OK\nContent-Type: %s\nContent-Length: %ld\nETag: %s\nConnection: %s\n\n", HTTP_VERSION, file_type, file_size, etag, connection_header_value(request));
     request->status = 200;
     request->bytes = file_size;
 
@@ -369,7 +374,7 @@ void send_file_response(Server* server, Request* request, int client_socket, con
 
 void send_301_redirect(Request *request, int client_socket, const char *new_location) {
     char response[BUFFER_SIZE];
-    sprintf(response, "%s 301 Moved Permanently\nLocation:%s\nContent-Length: 0\nConnection: close\n\n", HTTP_VERSION, new_location);
+    sprintf(response, "%s 301 Moved Permanently\nLocation:%s\nContent-Length: 0\nConnection: %s\n\n", HTTP_VERSION, new_location, connection_header_value(request));
 
     request->status = 301;
     request->bytes = 0;
@@ -381,7 +386,7 @@ void send_301_redirect(Request *request, int client_socket, const char *new_loca
 
 void send_304_not_modified_response(Request *request, int client_socket) {
     char response[BUFFER_SIZE];
-    sprintf(response, "%s 304 Not Modified\nConnection: close\n\n", HTTP_VERSION);
+    sprintf(response, "%s 304 Not Modified\nConnection: %s\n\n", HTTP_VERSION, connection_header_value(request));
     request->status = 304;
     request->bytes = 0;
 
@@ -438,4 +443,11 @@ void close_socket(int socket_fd) {
     if (socket_fd >= 0) {
         close(socket_fd);
     }
+}
+
+char* connection_header_value(Request* request) {
+    if (request->close_connection) {
+        return "close";
+    }
+    return "keep-alive";
 }
