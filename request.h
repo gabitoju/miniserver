@@ -17,6 +17,7 @@ typedef struct {
     char* if_none_match;
     char* query_params;
     int status;
+    int close_connection;
     size_t bytes;
 } Request;
 

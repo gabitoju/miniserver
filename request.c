@@ -96,9 +96,10 @@ Request parse_request(Config* config, char* raw_request) {
                 strncpy(req.real_ip, line + strlen(header_ip_buffer), MAX_HEADER_SIZE - 1);
             }
             req.real_ip[MAX_HEADER_SIZE - 1] = '\0';
+        } else if (strncasecmp(line, "Connection: close", 16) == 0) {
+            req.close_connection = 1;
         }
     }
-
     return req;
 }
 
