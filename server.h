@@ -1,6 +1,7 @@
 #ifndef SERVER
 #define SERVER
 
+#include "cache.h"
 #include "request.h"
 #include "config.h"
 #include <netinet/in.h>
@@ -11,6 +12,7 @@ typedef struct {
     int fd;
     struct sockaddr_in address;
     Config* config;
+    Cache* cache;
     FILE* access_log_file;
     FILE* error_log_file;
 } Server;

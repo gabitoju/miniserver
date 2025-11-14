@@ -17,7 +17,7 @@ typedef struct _list {
 
 List* list_create();
 void list_destroy(List* list);
-
 void list_push(List* list, void* data);
+void list_remove(List* list, Node* node);
 
 #endif // LIST

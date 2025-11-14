@@ -23,4 +23,7 @@
 
 #define REAL_IP_HEADER "X-Forward-For"
 
+#define CACHE_SIZE 265
+#define CACHE_TTL 60
+
 #endif //CONSTANTS

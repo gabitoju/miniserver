@@ -1,3 +1,4 @@
+#include "cache.h"
 #include "config.h"
 #include "server.h"
 #include "constants.h"
@@ -31,8 +32,11 @@ int main(int argc, char* argv[]) {
 
     read_config(&config);
 
+    Cache* cache = cache_create(CACHE_SIZE, CACHE_TTL);
+
     Server server = {
-        .config = &config
+        .config = &config,
+        .cache = cache
     };
     if (server_init(&server) != 0) {
         return 1;

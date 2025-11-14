@@ -40,3 +40,29 @@ void list_push(List* list, void* data) {
 
     list->size++;
 }
+
+void list_remove(List* list, Node* node) {
+
+    if (list == NULL || node == NULL) {
+        return;
+    }
+
+    if (list->size > 0) {
+
+        if (node->previous != NULL) {
+            node->previous->next = node->next;
+        } else {
+            list->head = node->next;
+        }
+       
+        if (node->next != NULL) {
+            node->next->previous = node->previous;
+        } else {
+            list->tail = node->previous;
+        }
+
+        list->size--;
+        free(node);
+    }
+
+}

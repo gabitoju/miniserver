@@ -1,3 +1,4 @@
+#include "cache.h"
 #include "constants.h"
 #include "server.h"
 #include <errno.h>
@@ -16,6 +17,7 @@
 #include "mime.h"
 #include <signal.h>
 #include <sys/wait.h>
+#include <fcntl.h>
 
 #if defined(__linux__)
 #include <sys/sendfile.h>
@@ -26,11 +28,11 @@
 
 volatile sig_atomic_t server_running = 1;
 
-int send_all(int socket_fd, const char* buffer, size_t len);
-void close_socket(int socket_fd);
-char* connection_header_value(Request* request);
+static int send_all(int socket_fd, const char* buffer, size_t len);
+static void close_socket(int socket_fd);
+static char* connection_header_value(Request* request);
 
-ssize_t portable_sendfile(int out_fd, int in_fd, off_t *offset, size_t count) {
+static ssize_t portable_sendfile(int out_fd, int in_fd, off_t *offset, size_t count) {
 #if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
     off_t len = count;
     int result = sendfile(in_fd, out_fd, *offset, &len, NULL, 0);
@@ -153,6 +155,7 @@ void server_destroy(Server* server) {
     free(server->config->content_path);
     free(server->config->mime_types_path);
     mime_destroy();
+    cache_destroy(server->cache);
     close(server->fd);
     fclose(server->access_log_file);
     fclose(server->error_log_file);
@@ -278,15 +281,46 @@ void send_file_response(Server* server, Request* request, int client_socket, con
         snprintf(full_path, sizeof(full_path), "%s%s", server->config->content_path, url_path);
     }
 
+    FileCache* cached_item = cache_get(server->cache, url_path);
+
+    if (cached_item != NULL) {
+        char etag[256];
+        sprintf(etag, "\"%llx-%llx\"", (unsigned long long)cached_item->mtime, (unsigned long long)cached_item->size);
+
+        if (request->if_none_match != NULL && strcmp(request->if_none_match, etag) == 0) {
+            send_304_not_modified_response(request, client_socket);
+            return;
+        }
+
+        char response_header[BUFFER_SIZE];
+        sprintf(response_header, "%s 200 OK\nContent-Type: %s\nContent-Length: %ld\nETag: %s\nConnection: %s\n\n", HTTP_VERSION, cached_item->mime_type, cached_item->size, etag, connection_header_value(request));
+        request->status = 200;
+        request->bytes = cached_item->size;
+
+
+        if (send_all(client_socket, response_header, strlen(response_header)) == -1) {
+            fprintf(stderr, "Error sending file response.\n");
+        }
+
+        if (strcmp(request->method, HTTP_GET) == 0) {
+            off_t offset = 0;
+            lseek(cached_item->fd, 0, SEEK_SET);
+            ssize_t sent = portable_sendfile(client_socket, cached_item->fd, &offset, cached_item->size);
+            if (sent == -1) {
+                perror("send file from cache failed");
+            }
+        }
+        return;
+    }
+
+    char etag[256];
     struct stat path_stats;
     if (stat(full_path, &path_stats) != 0) {
         send_404_response(request, client_socket);
         return;
     }
 
-    char etag[256];
     sprintf(etag, "\"%llx-%llx\"", (unsigned long long)path_stats.st_mtime, (unsigned long long)path_stats.st_size);
-
     if (request->if_none_match != NULL && strcmp(request->if_none_match, etag) == 0) {
         send_304_not_modified_response(request, client_socket);
         return;
@@ -349,9 +383,10 @@ void send_file_response(Server* server, Request* request, int client_socket, con
     }
 
     if (strcmp(request->method, HTTP_GET) == 0) {
-        int file_fd = fileno(file);
+        int file_fd = open(full_path, O_RDONLY);
         off_t offset = 0;
         ssize_t total_sent = 0;
+
 
         while (total_sent < file_size) {
             ssize_t sent = portable_sendfile(client_socket, file_fd, &offset, file_size - total_sent);
@@ -364,12 +399,11 @@ void send_file_response(Server* server, Request* request, int client_socket, con
             total_sent += sent;
 
             if (sent == 0) {
-                // connection closed or done
                 break;
             }
         }
+        cache_set(server->cache, url_path, url_path, NULL, file_type, file_fd, file_size, path_stats.st_mtime);
     }
-    fclose(file);
 }
 
 void send_301_redirect(Request *request, int client_socket, const char *new_location) {
@@ -395,7 +429,7 @@ void send_304_not_modified_response(Request *request, int client_socket) {
     }
 }
 
-int send_all(int socket_fd, const char* buffer, size_t len) {
+static int send_all(int socket_fd, const char* buffer, size_t len) {
     size_t total_sent = 0;
     ssize_t bytes_sent;
 
@@ -439,13 +473,13 @@ void log_request(Request* request) {
     );
 }
 
-void close_socket(int socket_fd) {
+static void close_socket(int socket_fd) {
     if (socket_fd >= 0) {
         close(socket_fd);
     }
 }
 
-char* connection_header_value(Request* request) {
+static char* connection_header_value(Request* request) {
     if (request->close_connection) {
         return "close";
     }
