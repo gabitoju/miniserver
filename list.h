@@ -1,14 +1,14 @@
 #ifndef LIST
 #define LIST
 
-typedef struct _node {
+typedef struct Node {
     void *data;
-    struct _node *next;
-    struct _node *previous;
+    struct Node *next;
+    struct Node *previous;
 
 } Node;
 
-typedef struct _list { 
+typedef struct List { 
     int size;
     Node *head;
     Node *tail;

@@ -4,8 +4,10 @@
 #include <stddef.h>
 #include <time.h>
 
-#include "list.h"
-#include "hashmap.h"
+struct HashMap;
+
+struct List;
+struct Node;
 
 typedef struct FileCache {
     char* key;
@@ -15,12 +17,12 @@ typedef struct FileCache {
     time_t mtime;
     time_t loaded_at;
     time_t expires_at;
-    Node* lru_node;
+    struct Node* lru_node;
 } FileCache;
 
 typedef struct Cache {
-    HashMap* cache;
-    List* cache_lru;
+    struct HashMap* cache;
+    struct List* cache_lru;
     int max_entries;
     int ttl;
 } Cache;

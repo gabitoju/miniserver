@@ -1,23 +1,25 @@
-#include "cache.h"
-#include "constants.h"
-#include "server.h"
 #include <errno.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <time.h>
+#include <signal.h>
+#include <fcntl.h>
+
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <unistd.h>
-#include <time.h>
+#include <sys/wait.h>
+
+#include "constants.h"
+#include "server.h"
 #include "log.h"
 #include "request.h"
 #include "mime.h"
-#include <signal.h>
-#include <sys/wait.h>
-#include <fcntl.h>
+#include "cache.h"
 
 #if defined(__linux__)
 #include <sys/sendfile.h>

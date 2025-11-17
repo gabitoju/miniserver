@@ -1,12 +1,13 @@
 #ifndef SERVER
 #define SERVER
 
+#include <stdio.h>
+
+#include <netinet/in.h>
+
 #include "cache.h"
 #include "request.h"
 #include "config.h"
-#include <netinet/in.h>
-#include <stdio.h>
-
 
 typedef struct {
     int fd;
