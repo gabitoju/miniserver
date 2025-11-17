@@ -1,10 +1,11 @@
 #ifndef CACHE
 #define CACHE
 
-#include "hashmap.h"
-#include "list.h"
 #include <stddef.h>
 #include <time.h>
+
+#include "list.h"
+#include "hashmap.h"
 
 typedef struct FileCache {
     char* key;

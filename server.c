@@ -194,6 +194,7 @@ void handle_connection(Server* server, int client_socket, const char* client_ip)
 
         if (strstr(request.path, "..")) {
             send_403_response(&request, client_socket);
+            free_request(&request);
             return;
         }
 
@@ -263,7 +264,7 @@ void send_404_response(Request* request, int client_socket) {
 void send_405_response(Request *request, int client_socket) {
     char response[BUFFER_SIZE];
     char* message = "405 Method Not Allowed";
-    sprintf(response, "%s 405 Method Not Allowed\r\nAllow:%s, %s\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\nConnection: %s\r\n\r\n%s", HTTP_VERSION, HTTP_GET, HTTP_HEAD, strlen(message), connection_header_value(request), message);
+    sprintf(response, "%s 405 Method Not Allowed\r\nAllow: %s, %s\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\nConnection: %s\r\n\r\n%s", HTTP_VERSION, HTTP_GET, HTTP_HEAD, strlen(message), connection_header_value(request), message);
     request->status = 405;
     request->bytes = strlen(message);
 
@@ -421,7 +422,7 @@ void send_file_response(Server* server, Request* request, int client_socket, con
 
 void send_301_redirect(Request *request, int client_socket, const char *new_location) {
     char response[BUFFER_SIZE];
-    sprintf(response, "%s 301 Moved Permanently\r\nLocation:%s\r\nContent-Length: 0\r\nConnection: %s\r\n\r\n", HTTP_VERSION, new_location, connection_header_value(request));
+    sprintf(response, "%s 301 Moved Permanently\r\nLocation: %s\r\nContent-Length: 0\r\nConnection: %s\r\n\r\n", HTTP_VERSION, new_location, connection_header_value(request));
 
     request->status = 301;
     request->bytes = 0;
