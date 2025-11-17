@@ -304,8 +304,8 @@ void send_file_response(Server* server, Request* request, int client_socket, con
 
         if (strcmp(request->method, HTTP_GET) == 0) {
             off_t offset = 0;
-            lseek(cached_item->fd, 0, SEEK_SET);
-            ssize_t sent = portable_sendfile(client_socket, cached_item->fd, &offset, cached_item->size);
+            int fd = open(cached_item->path, O_RDONLY);
+            ssize_t sent = portable_sendfile(client_socket, fd, &offset, cached_item->size);
             if (sent == -1) {
                 perror("send file from cache failed");
             }
@@ -402,7 +402,7 @@ void send_file_response(Server* server, Request* request, int client_socket, con
                 break;
             }
         }
-        cache_set(server->cache, url_path, url_path, NULL, file_type, file_fd, file_size, path_stats.st_mtime);
+        cache_set(server->cache, url_path, full_path, file_type, file_size, path_stats.st_mtime);
     }
 }
 
