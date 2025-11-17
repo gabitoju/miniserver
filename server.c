@@ -47,13 +47,13 @@ static ssize_t portable_sendfile(int out_fd, int in_fd, off_t *offset, size_t co
 }
 
 
-void int_handler(int dummy) {
+static void int_handler(int dummy) {
     (void)dummy;
     printf("Handler");
     server_running = 0;
 }
 
-void sigchld_handler(int s) {
+static void sigchld_handler(int s) {
     (void)s;
     int saved_errno = errno;
     while(waitpid(-1, NULL, WNOHANG) > 0);
@@ -165,8 +165,9 @@ void handle_connection(Server* server, int client_socket, const char* client_ip)
 
     struct timeval tv = { 5, 0 };
     setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-    
-    while (1) {
+   
+    int requests_served = 0;
+    while ((++requests_served) < MAX_KEEPALIVE_REQUESTS) {
         char buffer[BUFFER_SIZE] = {0};
         size_t total_received = 0;
         size_t remaining = 0;
@@ -190,6 +191,11 @@ void handle_connection(Server* server, int client_socket, const char* client_ip)
         }
 
         Request request = parse_request(server->config, buffer);
+
+        if (strstr(request.path, "..")) {
+            send_403_response(&request, client_socket);
+            return;
+        }
 
         if (request.real_ip) {
             char* comma = strchr(request.real_ip, ',');
@@ -233,7 +239,7 @@ void handle_request(Server* server, Request *request, int client_socket) {
 void send_403_response(Request* request, int client_socket) {
     char response[BUFFER_SIZE];
     char* message = "403 Forbidden";
-    sprintf(response, "%s 403 Forbidden\nContent-Type: text/plain\nContent-Length: %zu\nConnection: %s\n\n%s", HTTP_VERSION, strlen(message), connection_header_value(request), message);
+    sprintf(response, "%s 403 Forbidden\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\nConnection: %s\r\n\r\n%s", HTTP_VERSION, strlen(message), connection_header_value(request), message);
     request->status = 403;
     request->bytes = strlen(message);
 
@@ -245,7 +251,7 @@ void send_403_response(Request* request, int client_socket) {
 void send_404_response(Request* request, int client_socket) {
     char response[BUFFER_SIZE];
     char* message = "404 Not Found";
-    sprintf(response, "%s 404 Not Found\nContent-Type: text/plain\nContent-Length: %zu\nConnection: %s\n\n%s", HTTP_VERSION, strlen(message), connection_header_value(request), message);
+    sprintf(response, "%s 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\nConnection: %s\r\n\r\n%s", HTTP_VERSION, strlen(message), connection_header_value(request), message);
     request->status = 404;
     request->bytes = strlen(message);
 
@@ -257,7 +263,7 @@ void send_404_response(Request* request, int client_socket) {
 void send_405_response(Request *request, int client_socket) {
     char response[BUFFER_SIZE];
     char* message = "405 Method Not Allowed";
-    sprintf(response, "%s 405 Method Not Allowed\nALLOW:%s,%s\nContent-Type: text/plain\nContent-Length: %zu\nConnection: %s\n\n%s", HTTP_VERSION, HTTP_GET, HTTP_HEAD, strlen(message), connection_header_value(request), message);
+    sprintf(response, "%s 405 Method Not Allowed\r\nAllow:%s, %s\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\nConnection: %s\r\n\r\n%s", HTTP_VERSION, HTTP_GET, HTTP_HEAD, strlen(message), connection_header_value(request), message);
     request->status = 405;
     request->bytes = strlen(message);
 
@@ -293,7 +299,7 @@ void send_file_response(Server* server, Request* request, int client_socket, con
         }
 
         char response_header[BUFFER_SIZE];
-        sprintf(response_header, "%s 200 OK\nContent-Type: %s\nContent-Length: %ld\nETag: %s\nConnection: %s\n\n", HTTP_VERSION, cached_item->mime_type, cached_item->size, etag, connection_header_value(request));
+        sprintf(response_header, "%s 200 OK\r\nContent-Type: %s\r\nContent-Length: %ld\r\nETag: %s\r\nConnection: %s\r\n\r\n", HTTP_VERSION, cached_item->mime_type, cached_item->size, etag, connection_header_value(request));
         request->status = 200;
         request->bytes = cached_item->size;
 
@@ -308,6 +314,9 @@ void send_file_response(Server* server, Request* request, int client_socket, con
             ssize_t sent = portable_sendfile(client_socket, fd, &offset, cached_item->size);
             if (sent == -1) {
                 perror("send file from cache failed");
+            }
+            if (fd > 0) {
+                close(fd);
             }
         }
         return;
@@ -371,9 +380,10 @@ void send_file_response(Server* server, Request* request, int client_socket, con
     fseek(file, 0, SEEK_END);
     long file_size = ftell(file);
     fseek(file, 0, SEEK_SET);
+    fclose(file);
 
     char response_header[BUFFER_SIZE];
-    sprintf(response_header, "%s 200 OK\nContent-Type: %s\nContent-Length: %ld\nETag: %s\nConnection: %s\n\n", HTTP_VERSION, file_type, file_size, etag, connection_header_value(request));
+    sprintf(response_header, "%s 200 OK\r\nContent-Type: %s\r\nContent-Length: %ld\r\nETag: %s\r\nConnection: %s\r\n\r\n", HTTP_VERSION, file_type, file_size, etag, connection_header_value(request));
     request->status = 200;
     request->bytes = file_size;
 
@@ -403,12 +413,15 @@ void send_file_response(Server* server, Request* request, int client_socket, con
             }
         }
         cache_set(server->cache, url_path, full_path, file_type, file_size, path_stats.st_mtime);
+        if (file_fd >= 0) {
+            close(file_fd);
+        }
     }
 }
 
 void send_301_redirect(Request *request, int client_socket, const char *new_location) {
     char response[BUFFER_SIZE];
-    sprintf(response, "%s 301 Moved Permanently\nLocation:%s\nContent-Length: 0\nConnection: %s\n\n", HTTP_VERSION, new_location, connection_header_value(request));
+    sprintf(response, "%s 301 Moved Permanently\r\nLocation:%s\r\nContent-Length: 0\r\nConnection: %s\r\n\r\n", HTTP_VERSION, new_location, connection_header_value(request));
 
     request->status = 301;
     request->bytes = 0;
@@ -420,7 +433,7 @@ void send_301_redirect(Request *request, int client_socket, const char *new_loca
 
 void send_304_not_modified_response(Request *request, int client_socket) {
     char response[BUFFER_SIZE];
-    sprintf(response, "%s 304 Not Modified\nConnection: %s\n\n", HTTP_VERSION, connection_header_value(request));
+    sprintf(response, "%s 304 Not Modified\r\nConnection: %s\r\n\r\n", HTTP_VERSION, connection_header_value(request));
     request->status = 304;
     request->bytes = 0;
 

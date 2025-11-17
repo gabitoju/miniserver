@@ -62,7 +62,7 @@ HOST=$(echo "$TARGET" | sed 's#http://##; s#/##')
 
 section "1) Baseline: 500 sequential requests (-c 1)"
 
-ab -n 500 -c 1 "$TARGET" 2>&1 | tee -a "$LOGFILE"
+ab -n 500 -c 1 -k "$TARGET" 2>&1 | tee -a "$LOGFILE"
 
 
 # -------------------------------------------------
@@ -71,12 +71,12 @@ ab -n 500 -c 1 "$TARGET" 2>&1 | tee -a "$LOGFILE"
 
 section "2) Concurrency test: 2000 requests @ 20 concurrency"
 
-ab -n 2000 -c 20 "$TARGET" 2>&1 | tee -a "$LOGFILE"
+ab -n 2000 -c 20 -k "$TARGET" 2>&1 | tee -a "$LOGFILE"
 
 
 section "3) Concurrency test: 3000 requests @ 50 concurrency"
 
-ab -n 3000 -c 50 "$TARGET" 2>&1 | tee -a "$LOGFILE"
+ab -n 3000 -c 50 -k "$TARGET" 2>&1 | tee -a "$LOGFILE"
 
 
 # -------------------------------------------------

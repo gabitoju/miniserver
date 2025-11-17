@@ -26,4 +26,6 @@
 #define CACHE_SIZE 265
 #define CACHE_TTL 60
 
+#define MAX_KEEPALIVE_REQUESTS 1000
+
 #endif //CONSTANTS
