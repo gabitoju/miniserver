@@ -240,41 +240,49 @@ void handle_request(Server* server, Request *request, int client_socket) {
 }
 
 void send_403_response(Request* request, int client_socket) {
-    char response[BUFFER_SIZE];
-    char* message = "403 Forbidden";
-    sprintf(response, "%s 403 Forbidden\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\nConnection: %s\r\n\r\n%s", HTTP_VERSION, strlen(message), connection_header_value(request), message);
-    request->status = 403;
-    request->bytes = strlen(message);
+    request->status = HTTP_403_CODE;
+    request->bytes = HTTP_403_MESSAGE_LEN;
 
-    if (send_all(client_socket, response, strlen(response)) == -1) {
-        fprintf(stderr, "Error sending 403 response.\n");
+    if (request->close_connection) {
+        if (send_all(client_socket, HTTP_403_RESPONSE_CLOSE, strlen(HTTP_403_RESPONSE_CLOSE)) == -1) {
+            fprintf(stderr, "Error sending 403 response.\n");
+        }
+    } else {
+        if (send_all(client_socket, HTTP_403_RESPONSE_ALIVE, strlen(HTTP_403_RESPONSE_ALIVE)) == -1) {
+            fprintf(stderr, "Error sending 403 response.\n");
+        }
     }
 }
 
 void send_404_response(Request* request, int client_socket) {
-    char response[BUFFER_SIZE];
-    char* message = "404 Not Found";
-    sprintf(response, "%s 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\nConnection: %s\r\n\r\n%s", HTTP_VERSION, strlen(message), connection_header_value(request), message);
-    request->status = 404;
-    request->bytes = strlen(message);
+    request->status = HTTP_404_CODE;
+    request->bytes = HTTP_404_MESSAGE_LEN;
 
-    if (send_all(client_socket, response, strlen(response)) == -1) {
-        fprintf(stderr, "Error sending 404 response.\n");
+    if (request->close_connection) {
+        if (send_all(client_socket, HTTP_404_RESPONSE_CLOSE, strlen(HTTP_404_RESPONSE_CLOSE)) == -1) {
+            fprintf(stderr, "Error sending 404 response.\n");
+        }
+    } else {
+        if (send_all(client_socket, HTTP_404_RESPONSE_ALIVE, strlen(HTTP_404_RESPONSE_ALIVE)) == -1) {
+            fprintf(stderr, "Error sending 404 response.\n");
+        }
     }
 }
 
 void send_405_response(Request *request, int client_socket) {
-    char response[BUFFER_SIZE];
-    char* message = "405 Method Not Allowed";
-    sprintf(response, "%s 405 Method Not Allowed\r\nAllow: %s, %s\r\nContent-Type: text/plain\r\nContent-Length: %zu\r\nConnection: %s\r\n\r\n%s", HTTP_VERSION, HTTP_GET, HTTP_HEAD, strlen(message), connection_header_value(request), message);
-    request->status = 405;
-    request->bytes = strlen(message);
+    request->status = HTTP_405_CODE;
+    request->bytes = HTTP_405_MESSAGE_LEN;
 
-    if (send_all(client_socket, response, strlen(response)) == -1) {
-        fprintf(stderr, "Error sending 405 response.\n");
+    if (request->close_connection) {
+        if (send_all(client_socket, HTTP_405_RESPONSE_CLOSE, strlen(HTTP_405_RESPONSE_CLOSE)) == -1) {
+            fprintf(stderr, "Error sending 405 response.\n");
+        }
+    } else {
+        if (send_all(client_socket, HTTP_405_RESPONSE_ALIVE, strlen(HTTP_405_RESPONSE_ALIVE)) == -1) {
+            fprintf(stderr, "Error sending 405 response.\n");
+        }
     }
 }
-
 
 void send_file_response(Server* server, Request* request, int client_socket, const char* url_path) {
 
@@ -303,7 +311,7 @@ void send_file_response(Server* server, Request* request, int client_socket, con
 
         char response_header[BUFFER_SIZE];
         sprintf(response_header, "%s 200 OK\r\nContent-Type: %s\r\nContent-Length: %ld\r\nETag: %s\r\nConnection: %s\r\n\r\n", HTTP_VERSION, cached_item->mime_type, cached_item->size, etag, connection_header_value(request));
-        request->status = 200;
+        request->status = HTTP_200_CODE;
         request->bytes = cached_item->size;
 
 
@@ -387,7 +395,7 @@ void send_file_response(Server* server, Request* request, int client_socket, con
 
     char response_header[BUFFER_SIZE];
     sprintf(response_header, "%s 200 OK\r\nContent-Type: %s\r\nContent-Length: %ld\r\nETag: %s\r\nConnection: %s\r\n\r\n", HTTP_VERSION, file_type, file_size, etag, connection_header_value(request));
-    request->status = 200;
+    request->status = HTTP_200_CODE;
     request->bytes = file_size;
 
 
@@ -424,9 +432,9 @@ void send_file_response(Server* server, Request* request, int client_socket, con
 
 void send_301_redirect(Request *request, int client_socket, const char *new_location) {
     char response[BUFFER_SIZE];
-    sprintf(response, "%s 301 Moved Permanently\r\nLocation: %s\r\nContent-Length: 0\r\nConnection: %s\r\n\r\n", HTTP_VERSION, new_location, connection_header_value(request));
+    sprintf(response, "%s %s\r\nLocation: %s\r\nContent-Length: 0\r\nConnection: %s\r\n\r\n", HTTP_VERSION, HTTP_301_MESSAGE, new_location, connection_header_value(request));
 
-    request->status = 301;
+    request->status = HTTP_301_CODE;
     request->bytes = 0;
 
     if (send_all(client_socket, response, strlen(response)) == -1) {
@@ -435,13 +443,17 @@ void send_301_redirect(Request *request, int client_socket, const char *new_loca
 }
 
 void send_304_not_modified_response(Request *request, int client_socket) {
-    char response[BUFFER_SIZE];
-    sprintf(response, "%s 304 Not Modified\r\nConnection: %s\r\n\r\n", HTTP_VERSION, connection_header_value(request));
-    request->status = 304;
+    request->status = HTTP_304_CODE;
     request->bytes = 0;
 
-    if (send_all(client_socket, response, strlen(response)) == -1) {
-        fprintf(stderr, "Error sending 304 response.\n");
+    if (request->close_connection) {
+        if (send_all(client_socket, HTTP_304_RESPONSE_CLOSE, strlen(HTTP_304_RESPONSE_CLOSE)) == -1) {
+            fprintf(stderr, "Error sending 304 response.\n");
+        }
+    } else {
+        if (send_all(client_socket, HTTP_304_RESPONSE_ALIVE, strlen(HTTP_304_RESPONSE_ALIVE)) == -1) {
+            fprintf(stderr, "Error sending 304 response.\n");
+        }
     }
 }
 
