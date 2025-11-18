@@ -20,6 +20,7 @@
 #include "request.h"
 #include "mime.h"
 #include "cache.h"
+#include "response.h"
 
 #if defined(__linux__)
 #include <sys/sendfile.h>
@@ -30,9 +31,11 @@
 
 volatile sig_atomic_t server_running = 1;
 
+static int send_response(Request* request, int client_socket, int status_code, const char* status_line, const char* content_type, const char* body, size_t body_len, const char* extra_headers[], size_t extra_count);
 static int send_all(int socket_fd, const char* buffer, size_t len);
 static void close_socket(int socket_fd);
 static char* connection_header_value(Request* request);
+
 
 static ssize_t portable_sendfile(int out_fd, int in_fd, off_t *offset, size_t count) {
 #if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
@@ -240,47 +243,26 @@ void handle_request(Server* server, Request *request, int client_socket) {
 }
 
 void send_403_response(Request* request, int client_socket) {
-    request->status = HTTP_403_CODE;
-    request->bytes = HTTP_403_MESSAGE_LEN;
+    const char* no_extra[] = {};
 
-    if (request->close_connection) {
-        if (send_all(client_socket, HTTP_403_RESPONSE_CLOSE, strlen(HTTP_403_RESPONSE_CLOSE)) == -1) {
-            fprintf(stderr, "Error sending 403 response.\n");
-        }
-    } else {
-        if (send_all(client_socket, HTTP_403_RESPONSE_ALIVE, strlen(HTTP_403_RESPONSE_ALIVE)) == -1) {
-            fprintf(stderr, "Error sending 403 response.\n");
-        }
+    if (send_response(request, client_socket, HTTP_403_CODE, HTTP_403_STATUS_LINE, TEXT_CONTENT_TYPE, HTTP_403_MESSAGE, HTTP_403_MESSAGE_LEN, no_extra, 0) == -1) {
+        fprintf(stderr, "Error sending 403 response.\n");
     }
 }
 
 void send_404_response(Request* request, int client_socket) {
-    request->status = HTTP_404_CODE;
-    request->bytes = HTTP_404_MESSAGE_LEN;
+    const char* no_extra[] = {};
 
-    if (request->close_connection) {
-        if (send_all(client_socket, HTTP_404_RESPONSE_CLOSE, strlen(HTTP_404_RESPONSE_CLOSE)) == -1) {
-            fprintf(stderr, "Error sending 404 response.\n");
-        }
-    } else {
-        if (send_all(client_socket, HTTP_404_RESPONSE_ALIVE, strlen(HTTP_404_RESPONSE_ALIVE)) == -1) {
-            fprintf(stderr, "Error sending 404 response.\n");
-        }
+    if (send_response(request, client_socket, HTTP_404_CODE, HTTP_404_STATUS_LINE, TEXT_CONTENT_TYPE, HTTP_404_MESSAGE, HTTP_404_MESSAGE_LEN, no_extra, 0) == -1) {
+        fprintf(stderr, "Error sending 404 response.\n");
+        return;
     }
 }
 
 void send_405_response(Request *request, int client_socket) {
-    request->status = HTTP_405_CODE;
-    request->bytes = HTTP_405_MESSAGE_LEN;
-
-    if (request->close_connection) {
-        if (send_all(client_socket, HTTP_405_RESPONSE_CLOSE, strlen(HTTP_405_RESPONSE_CLOSE)) == -1) {
-            fprintf(stderr, "Error sending 405 response.\n");
-        }
-    } else {
-        if (send_all(client_socket, HTTP_405_RESPONSE_ALIVE, strlen(HTTP_405_RESPONSE_ALIVE)) == -1) {
-            fprintf(stderr, "Error sending 405 response.\n");
-        }
+    const char* extra_header[] = { HTTP_405_EXTRA_HEADER };
+    if (send_response(request, client_socket, HTTP_405_CODE, HTTP_405_STATUS_LINE, TEXT_CONTENT_TYPE, HTTP_405_MESSAGE, HTTP_405_MESSAGE_LEN, extra_header, 1) == -1) {
+        fprintf(stderr, "Error sending 405 response.\n");
     }
 }
 
@@ -305,7 +287,7 @@ void send_file_response(Server* server, Request* request, int client_socket, con
         sprintf(etag, "\"%llx-%llx\"", (unsigned long long)cached_item->mtime, (unsigned long long)cached_item->size);
 
         if (request->if_none_match != NULL && strcmp(request->if_none_match, etag) == 0) {
-            send_304_not_modified_response(request, client_socket);
+            send_304_response(request, client_socket);
             return;
         }
 
@@ -342,7 +324,7 @@ void send_file_response(Server* server, Request* request, int client_socket, con
 
     sprintf(etag, "\"%llx-%llx\"", (unsigned long long)path_stats.st_mtime, (unsigned long long)path_stats.st_size);
     if (request->if_none_match != NULL && strcmp(request->if_none_match, etag) == 0) {
-        send_304_not_modified_response(request, client_socket);
+        send_304_response(request, client_socket);
         return;
     }
 
@@ -353,7 +335,7 @@ void send_file_response(Server* server, Request* request, int client_socket, con
         if (path_len > 0 && url_path[path_len - 1] != '/') {
             char new_location[BUFFER_SIZE];
             snprintf(new_location, sizeof(new_location), "%s/", url_path);
-            send_301_redirect(request, client_socket, new_location);
+            send_301_response(request, client_socket, new_location);
             return;
         } else {
             strncat(full_path, INDEX_SLASH, sizeof(full_path)- strlen(full_path) - 1);
@@ -430,30 +412,21 @@ void send_file_response(Server* server, Request* request, int client_socket, con
     }
 }
 
-void send_301_redirect(Request *request, int client_socket, const char *new_location) {
-    char response[BUFFER_SIZE];
-    sprintf(response, "%s %s\r\nLocation: %s\r\nContent-Length: 0\r\nConnection: %s\r\n\r\n", HTTP_VERSION, HTTP_301_MESSAGE, new_location, connection_header_value(request));
+void send_301_response(Request *request, int client_socket, const char *new_location) {
+    char location[BUFFER_SIZE];
+    snprintf(location, BUFFER_SIZE, "Location: %s", new_location);
+    const char* extra_header[] = { location };
 
-    request->status = HTTP_301_CODE;
-    request->bytes = 0;
-
-    if (send_all(client_socket, response, strlen(response)) == -1) {
+    if (send_response(request, client_socket, HTTP_301_CODE, HTTP_301_STATUS_LINE, TEXT_CONTENT_TYPE, NULL, 0, extra_header, 1) == -1) {
         fprintf(stderr, "Error sending 301 response.\n");
     }
 }
 
-void send_304_not_modified_response(Request *request, int client_socket) {
-    request->status = HTTP_304_CODE;
-    request->bytes = 0;
+void send_304_response(Request *request, int client_socket) {
+    const char* no_extra[] = {};
 
-    if (request->close_connection) {
-        if (send_all(client_socket, HTTP_304_RESPONSE_CLOSE, strlen(HTTP_304_RESPONSE_CLOSE)) == -1) {
-            fprintf(stderr, "Error sending 304 response.\n");
-        }
-    } else {
-        if (send_all(client_socket, HTTP_304_RESPONSE_ALIVE, strlen(HTTP_304_RESPONSE_ALIVE)) == -1) {
-            fprintf(stderr, "Error sending 304 response.\n");
-        }
+    if (send_response(request, client_socket, HTTP_304_CODE, HTTP_304_STATUS_LINE, TEXT_CONTENT_TYPE, NULL, 0, no_extra, 0) == -1) {
+        fprintf(stderr, "Error sending 304 response.\n");
     }
 }
 
@@ -512,4 +485,34 @@ static char* connection_header_value(Request* request) {
         return "close";
     }
     return "keep-alive";
+}
+
+static int send_response(
+    Request* request, 
+    int client_socket, 
+    int status_code,
+    const char* status_line, 
+    const char* content_type, 
+    const char* body, 
+    size_t body_len, 
+    const char* extra_headers[], 
+    size_t extra_count
+) {
+    char headers[BUFFER_SIZE];
+    request->status = status_code;
+    request->bytes = body_len;
+
+    size_t headers_size = response_build_headers(headers, BUFFER_SIZE, content_type, status_line, body_len, request->close_connection, extra_headers, extra_count);
+
+    if (send_all(client_socket, headers, headers_size) == -1) {
+        return -1;
+    }
+
+    if (body && body_len > 0) {
+        if (send_all(client_socket, body, body_len) == -1) {
+            return -1;
+        }
+    }
+
+    return 0;
 }
