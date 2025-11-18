@@ -243,7 +243,7 @@ void handle_request(Server* server, Request *request, int client_socket) {
 }
 
 void send_403_response(Request* request, int client_socket) {
-    const char* no_extra[] = {};
+    const char* no_extra[] = { NULL };
 
     if (send_response(request, client_socket, HTTP_403_CODE, HTTP_403_STATUS_LINE, TEXT_CONTENT_TYPE, HTTP_403_MESSAGE, HTTP_403_MESSAGE_LEN, no_extra, 0) == -1) {
         fprintf(stderr, "Error sending 403 response.\n");
@@ -251,7 +251,7 @@ void send_403_response(Request* request, int client_socket) {
 }
 
 void send_404_response(Request* request, int client_socket) {
-    const char* no_extra[] = {};
+    const char* no_extra[] = { NULL };
 
     if (send_response(request, client_socket, HTTP_404_CODE, HTTP_404_STATUS_LINE, TEXT_CONTENT_TYPE, HTTP_404_MESSAGE, HTTP_404_MESSAGE_LEN, no_extra, 0) == -1) {
         fprintf(stderr, "Error sending 404 response.\n");
@@ -423,7 +423,7 @@ void send_301_response(Request *request, int client_socket, const char *new_loca
 }
 
 void send_304_response(Request *request, int client_socket) {
-    const char* no_extra[] = {};
+    const char* no_extra[] = { NULL };
 
     if (send_response(request, client_socket, HTTP_304_CODE, HTTP_304_STATUS_LINE, TEXT_CONTENT_TYPE, NULL, 0, no_extra, 0) == -1) {
         fprintf(stderr, "Error sending 304 response.\n");
