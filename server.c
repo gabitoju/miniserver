@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -39,6 +40,8 @@ static int send_all(int socket_fd, const char* buffer, size_t len);
 static void close_socket(int socket_fd);
 static char* connection_header_value(Request* request);
 
+static void send_cached_file(Request* request, int client_socket, FileCache* cached_item);
+static void build_etag(char* etag, size_t etag_size, uint64_t mtime, uint64_t size);
 
 static ssize_t portable_sendfile(int out_fd, int in_fd, off_t *offset, size_t count) {
 #if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
@@ -280,48 +283,19 @@ void send_file_response(Server* server, Request* request, int client_socket, con
     }
 
     FileCache* cached_item = cache_get(server->cache, url_path);
-
     if (cached_item != NULL) {
-        char etag[256];
-        sprintf(etag, "\"%llx-%llx\"", (unsigned long long)cached_item->mtime, (unsigned long long)cached_item->size);
-
-        if (request->if_none_match != NULL && strcmp(request->if_none_match, etag) == 0) {
-            send_304_response(request, client_socket);
-            return;
-        }
-
-        char response_header[BUFFER_SIZE];
-        sprintf(response_header, "%s 200 OK\r\nContent-Type: %s\r\nContent-Length: %ld\r\nETag: %s\r\nConnection: %s\r\n\r\n", HTTP_VERSION, cached_item->mime_type, cached_item->size, etag, connection_header_value(request));
-        request->status = HTTP_200_CODE;
-        request->bytes = cached_item->size;
-
-
-        if (send_all(client_socket, response_header, strlen(response_header)) == -1) {
-            fprintf(stderr, "Error sending file response.\n");
-        }
-
-        if (strcmp(request->method, HTTP_GET) == 0) {
-            off_t offset = 0;
-            int fd = open(cached_item->path, O_RDONLY);
-            ssize_t sent = portable_sendfile(client_socket, fd, &offset, cached_item->size);
-            if (sent == -1) {
-                perror("send file from cache failed");
-            }
-            if (fd > 0) {
-                close(fd);
-            }
-        }
+        send_cached_file(request, client_socket, cached_item);
         return;
     }
 
-    char etag[256];
     struct stat path_stats;
     if (stat(full_path, &path_stats) != 0) {
         send_404_response(request, client_socket);
         return;
     }
 
-    sprintf(etag, "\"%llx-%llx\"", (unsigned long long)path_stats.st_mtime, (unsigned long long)path_stats.st_size);
+    char etag[ETAG_SIZE];
+    build_etag(etag, ETAG_SIZE, path_stats.st_mtime, path_stats.st_size);
     if (request->if_none_match != NULL && strcmp(request->if_none_match, etag) == 0) {
         send_304_response(request, client_socket);
         return;
@@ -377,7 +351,6 @@ void send_file_response(Server* server, Request* request, int client_socket, con
     char response_header[BUFFER_SIZE];
     sprintf(response_header, "%s 200 OK\r\nContent-Type: %s\r\nContent-Length: %ld\r\nETag: %s\r\nConnection: %s\r\n\r\n", HTTP_VERSION, file_type, file_size, etag, connection_header_value(request));
     request->status = HTTP_200_CODE;
-    request->bytes = file_size;
 
 
     if (send_all(client_socket, response_header, strlen(response_header)) == -1) {
@@ -385,6 +358,7 @@ void send_file_response(Server* server, Request* request, int client_socket, con
     }
 
     if (strcmp(request->method, HTTP_GET) == 0) {
+        request->bytes = file_size;
         int file_fd = open(full_path, O_RDONLY);
         off_t offset = 0;
         ssize_t total_sent = 0;
@@ -404,11 +378,15 @@ void send_file_response(Server* server, Request* request, int client_socket, con
                 break;
             }
         }
-        cache_set(server->cache, url_path, full_path, file_type, file_size, path_stats.st_mtime);
+        cache_set(server->cache, url_path, full_path, file_type, response_header, file_size, path_stats.st_mtime);
         if (file_fd >= 0) {
             close(file_fd);
         }
     }
+
+    if (strcmp(request->method, HTTP_HEAD) == 0) {
+        request->bytes = 0;
+    }        
 }
 
 void send_301_response(Request *request, int client_socket, const char *new_location) {
@@ -512,4 +490,39 @@ static int send_response(
     }
 
     return 0;
+}
+
+static void send_cached_file(Request* request, int client_socket, FileCache* cached_item) {
+    char etag[ETAG_SIZE];
+    build_etag(etag, ETAG_SIZE, cached_item->mtime, cached_item->size);
+
+    if (request->if_none_match != NULL && strcmp(request->if_none_match, etag) == 0) {
+        send_304_response(request, client_socket);
+        return;
+    }
+
+    request->status = HTTP_200_CODE;
+
+    if (send_all(client_socket, cached_item->headers, strlen(cached_item->headers)) == -1) {
+        fprintf(stderr, "Error sending file response.\n");
+    }
+
+    if (strcmp(request->method, HTTP_GET) == 0) {
+        request->bytes = cached_item->size;
+        off_t offset = 0;
+        int fd = open(cached_item->path, O_RDONLY);
+        ssize_t sent = portable_sendfile(client_socket, fd, &offset, cached_item->size);
+        if (sent == -1) {
+            perror("send file from cache failed");
+        }
+        if (fd > 0) {
+            close(fd);
+        }
+    } else if (strcmp(request->method, HTTP_HEAD) == 0) {
+        request->bytes = 0;
+    }        
+}
+
+static void build_etag(char* etag, size_t etag_size, uint64_t mtime, uint64_t size) {
+    snprintf(etag, etag_size, "\"%llx-%llx\"", mtime, size);
 }

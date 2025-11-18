@@ -23,7 +23,7 @@ Cache* cache_create(int max_entries, int ttl) {
 }
 
 
-void cache_set(Cache* cache, const char* key, const char* path, const char* mime_type, size_t size, time_t mtime) {
+void cache_set(Cache* cache, const char* key, const char* path, const char* mime_type, const char* headers, size_t size, time_t mtime) {
 
     FileCache* existing_item = hashmap_get(cache->cache, key);
     if (existing_item != NULL) {
@@ -34,9 +34,13 @@ void cache_set(Cache* cache, const char* key, const char* path, const char* mime
             free(existing_item->path);
             existing_item->path = strdup(path);
         }
-        if (strcmp(existing_item->mime_type, mime_type) != 0) {
+        if (mime_type != NULL && strcmp(existing_item->mime_type, mime_type) != 0) {
             free(existing_item->mime_type);
             existing_item->mime_type = mime_type ? strdup(mime_type) : NULL;
+        }
+        if (headers != NULL && strcmp(existing_item->headers, headers) != 0) {
+            free(existing_item->headers);
+            existing_item->headers = strdup(headers);
         }
         existing_item->mtime = mtime;
 
@@ -61,6 +65,7 @@ void cache_set(Cache* cache, const char* key, const char* path, const char* mime
     file_cache->path = strdup(path);
     file_cache->key = strdup(key);
     file_cache->mime_type = mime_type ? strdup(mime_type) : NULL;
+    file_cache->headers = strdup(headers);
     file_cache->mtime = mtime;
   
     file_cache->loaded_at = time(NULL);
@@ -123,6 +128,10 @@ static void free_cache_item(FileCache* item) {
 
     if (item->mime_type) {
         free(item->mime_type);
+    }
+
+    if (item->headers) {
+        free(item->headers);
     }
 
     free(item);
