@@ -1,5 +1,5 @@
-#ifndef LIST
-#define LIST
+#ifndef LIST_H
+#define LIST_H
 
 typedef struct Node {
     void *data;
@@ -20,4 +20,4 @@ void list_destroy(List* list);
 void list_push(List* list, void* data);
 void list_remove(List* list, Node* node);
 
-#endif // LIST
+#endif // LIST_H

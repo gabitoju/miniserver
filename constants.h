@@ -1,5 +1,5 @@
-#ifndef CONSTANTS
-#define CONSTANTS
+#ifndef CONSTANTS_H
+#define CONSTANTS_H
 
 #define STR_HELPER(x) #x
 #define STR(x) STR_HELPER(x)
@@ -108,4 +108,4 @@
 #define HTTP_301_CODE 301
 #define HTTP_301_MESSAGE "301 Moved Permanently"
 
-#endif //CONSTANTS
+#endif //CONSTANTS_H

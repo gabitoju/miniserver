@@ -1,5 +1,5 @@
-#ifndef HASHMAP
-#define HASHMAP
+#ifndef HASHMAP_H
+#define HASHMAP_H
 
 struct Bucket;
 typedef struct Bucket Bucket;
@@ -14,4 +14,4 @@ void* hashmap_get(HashMap* hash_map, const char* key);
 void hashmap_remove(HashMap* hash_map, const char* key);
 int hashmap_size(HashMap* hash_map);
 
-#endif // HASHMAP
+#endif // HASHMAP_H

@@ -1,5 +1,5 @@
-#ifndef CACHE
-#define CACHE
+#ifndef CACHE_H
+#define CACHE_H
 
 #include <stddef.h>
 #include <time.h>
@@ -32,4 +32,4 @@ void cache_set(Cache* cache, const char* key, const char* path, const char* mime
 FileCache* cache_get(Cache* cache, const char* key);
 void cache_destroy(Cache* cache);
 
-#endif // CACHE
+#endif // CACHE_H

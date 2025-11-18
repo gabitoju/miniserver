@@ -1,5 +1,5 @@
-#ifndef SERVER
-#define SERVER
+#ifndef SERVER_H
+#define SERVER_H
 
 #include <stdio.h>
 
@@ -33,4 +33,4 @@ void send_403_response(Request* request, int client_socket);
 void send_404_response(Request* request, int client_socket);
 void send_405_response(Request* request, int client_socket);
 
-#endif // SERVER
+#endif // SERVER_H

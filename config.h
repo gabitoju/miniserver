@@ -1,5 +1,5 @@
-#ifndef CONFIG
-#define CONFIG
+#ifndef CONFIG_H
+#define CONFIG_H
 
 #include <stdio.h>
 
@@ -15,4 +15,4 @@ typedef struct  {
 
 void read_config(Config* config);
 
-#endif // CONFIG
+#endif // CONFIG_H
