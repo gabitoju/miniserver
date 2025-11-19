@@ -6,6 +6,9 @@
 #include "config.h"
 
 typedef struct {
+    int status;
+    size_t bytes;
+    int close_connection;
     char* method;
     char* path;
     char* version;
@@ -16,13 +19,11 @@ typedef struct {
     char* referer;
     char* if_none_match;
     char* query_params;
-    int status;
-    int close_connection;
-    size_t bytes;
 } Request;
 
 Request parse_request(Config* config, char* raw_request);
 
+void request_resolve_ip(Request* request, const char* client_ip);
 void free_request(Request* request);
 
 #endif // REQUEST_H

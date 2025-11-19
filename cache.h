@@ -10,22 +10,22 @@ struct List;
 struct Node;
 
 typedef struct FileCache {
-    char* key;
-    char* path;
-    char* mime_type;
-    char* headers;
     size_t size;
     time_t mtime;
     time_t loaded_at;
     time_t expires_at;
+    char* key;
+    char* path;
+    char* mime_type;
+    char* headers;
     struct Node* lru_node;
 } FileCache;
 
 typedef struct Cache {
-    struct HashMap* cache;
-    struct List* cache_lru;
     int max_entries;
     int ttl;
+    struct HashMap* cache;
+    struct List* cache_lru;
 } Cache;
 
 Cache* cache_create(int max_entries, int ttl);

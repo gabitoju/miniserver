@@ -103,6 +103,22 @@ Request parse_request(Config* config, char* raw_request) {
     return req;
 }
 
+void request_resolve_ip(Request* request, const char* client_ip) {
+    if (request->real_ip) {
+        char* comma = strchr(request->real_ip, ',');
+        if (comma) {
+            size_t len = comma - request->real_ip;
+            request->client_ip = malloc(len + 1);
+            memcpy(request->client_ip, request->real_ip, len);
+            request->client_ip[len] = '\0';
+        } else {
+            request->client_ip = strdup(request->real_ip);
+        }
+    } else {
+        request->client_ip = client_ip ? strdup(client_ip) : NULL;
+    }
+}
+
 void free_request(Request *request) {
     free(request->method);
     free(request->path);

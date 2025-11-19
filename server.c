@@ -32,16 +32,13 @@
 
 static const char* NO_EXTRA[1] = { NULL };
 
-
 volatile sig_atomic_t server_running = 1;
 
 static int send_response(Request* request, int client_socket, int status_code, const char* status_line, const char* content_type, const char* body, size_t body_len, const char* extra_headers[], size_t extra_count);
 static int send_all(int socket_fd, const char* buffer, size_t len);
 static void close_socket(int socket_fd);
-static char* connection_header_value(Request* request);
 
 static void send_cached_file(Request* request, int client_socket, FileCache* cached_item);
-static void build_etag(char* etag, size_t etag_size, uint64_t mtime, uint64_t size);
 
 static ssize_t portable_sendfile(int out_fd, int in_fd, off_t *offset, size_t count) {
 #if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
@@ -72,7 +69,7 @@ static void sigchld_handler(int s) {
 }
 
 int server_init(Server * server) {
-    if ((server->fd = socket(AF_INET, SOCK_STREAM, 0)) ==  0) {
+    if ((server->fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         perror("socket failed");
         return -1;
     }
@@ -81,7 +78,6 @@ int server_init(Server * server) {
     server->address.sin_addr.s_addr = INADDR_ANY;
     server->address.sin_port = htons(server->config->port);
     int val = 1;
-
     // Set socket options to allow immediate reuse of the address/port (this allows for faster shutdown)
     #ifdef SO_REUSEPORT
         setsockopt(server->fd, SOL_SOCKET, SO_REUSEPORT, &val, sizeof(val));
@@ -129,10 +125,11 @@ void server_run(Server* server) {
     }
 
     int new_socket;
-    socklen_t addrlen = sizeof(server->address);
 
     while (server_running) {
-        if ((new_socket = accept(server->fd, (struct sockaddr*)&server->address, &addrlen)) < 0) {
+        struct sockaddr_in client_addr;
+        socklen_t addrlen = sizeof(client_addr);
+        if ((new_socket = accept(server->fd, (struct sockaddr*)&client_addr, &addrlen)) < 0) {
             if (errno == EINTR) {
                 continue;
             }
@@ -144,7 +141,6 @@ void server_run(Server* server) {
         }
 
         pid_t pid = fork();
-
         if (pid < 0) {
             perror("fork failed");
             close(new_socket);
@@ -153,7 +149,7 @@ void server_run(Server* server) {
 
         if (pid == 0) {
             close(server->fd);
-            char* client_ip = inet_ntoa(server->address.sin_addr);
+            char* client_ip = inet_ntoa(client_addr.sin_addr);
             handle_connection(server, new_socket, client_ip);
             exit(0);
         } else {
@@ -203,25 +199,13 @@ void handle_connection(Server* server, int client_socket, const char* client_ip)
 
         Request request = parse_request(server->config, buffer);
 
-        if (strstr(request.path, "..")) {
+        if (request.path && strstr(request.path, "..")) {
             send_403_response(&request, client_socket);
             free_request(&request);
             return;
         }
 
-        if (request.real_ip) {
-            char* comma = strchr(request.real_ip, ',');
-            if (comma) {
-                size_t len = comma - request.real_ip;
-                request.client_ip = malloc(len + 1);
-                strncpy(request.client_ip, request.real_ip, len);
-                request.client_ip[len] = '\0';
-            } else {
-                request.client_ip = strdup(request.real_ip);
-            }
-        } else {
-            request.client_ip = client_ip ? strdup(client_ip) : NULL;
-        }
+        request_resolve_ip(&request, client_ip);
 
         if (request.method == NULL) {
             close_socket(client_socket);
@@ -268,14 +252,29 @@ void send_405_response(Request *request, int client_socket) {
     }
 }
 
-void send_file_response(Server* server, Request* request, int client_socket, const char* url_path) {
+void send_301_response(Request *request, int client_socket, const char *new_location) {
+    char location[BUFFER_SIZE];
+    snprintf(location, BUFFER_SIZE, "Location: %s", new_location);
+    const char* extra_header[] = { location };
 
+    if (send_response(request, client_socket, HTTP_301_CODE, HTTP_301_STATUS_LINE, TEXT_CONTENT_TYPE, NULL, 0, extra_header, 1) == -1) {
+        fprintf(stderr, "Error sending 301 response.\n");
+    }
+}
+
+void send_304_response(Request *request, int client_socket) {
+    if (send_response(request, client_socket, HTTP_304_CODE, HTTP_304_STATUS_LINE, TEXT_CONTENT_TYPE, NULL, 0, NO_EXTRA, 0) == -1) {
+        fprintf(stderr, "Error sending 304 response.\n");
+    }
+}
+
+void send_file_response(Server* server, Request* request, int client_socket, const char* url_path) {
     if (strstr(url_path, "/../") != NULL) {
         send_403_response(request, client_socket);
         return;
     }
+    
     char full_path[BUFFER_SIZE];
-
     if (strcmp(url_path, "/") == 0) {
         snprintf(full_path, sizeof(full_path), "%s/%s", server->config->content_path, INDEX);
     } else {
@@ -295,7 +294,8 @@ void send_file_response(Server* server, Request* request, int client_socket, con
     }
 
     char etag[ETAG_SIZE];
-    build_etag(etag, ETAG_SIZE, path_stats.st_mtime, path_stats.st_size);
+    char etag_header[BUFFER_SIZE];
+    build_etag(etag, etag_header, ETAG_SIZE, BUFFER_SIZE, path_stats.st_mtime, path_stats.st_size);
     if (request->if_none_match != NULL && strcmp(request->if_none_match, etag) == 0) {
         send_304_response(request, client_socket);
         return;
@@ -307,7 +307,7 @@ void send_file_response(Server* server, Request* request, int client_socket, con
 
         if (path_len > 0 && url_path[path_len - 1] != '/') {
             char new_location[BUFFER_SIZE];
-            snprintf(new_location, sizeof(new_location), "%s/", url_path);
+            snprintf(new_location, BUFFER_SIZE, "%s/", url_path);
             send_301_response(request, client_socket, new_location);
             return;
         } else {
@@ -322,7 +322,6 @@ void send_file_response(Server* server, Request* request, int client_socket, con
     }
 
     char* real_path = realpath(full_path, NULL);
-
     if (real_path != NULL) {
         if (strncmp(real_path, server->config->content_path, strlen(server->config->content_path)) != 0) {
             free(real_path);
@@ -330,8 +329,7 @@ void send_file_response(Server* server, Request* request, int client_socket, con
             send_403_response(request, client_socket);
             return;
         }
-    }
-    else {
+    } else {
         send_404_response(request, client_socket);
         fclose(file);
         return;
@@ -340,7 +338,7 @@ void send_file_response(Server* server, Request* request, int client_socket, con
 
     const char* file_type = file_mime_type(full_path);
     if (file_type == NULL) {
-        file_type = "application/octet-stream";
+        file_type = DEFAULT_MIME;
     }
 
     fseek(file, 0, SEEK_END);
@@ -349,9 +347,11 @@ void send_file_response(Server* server, Request* request, int client_socket, con
     fclose(file);
 
     char response_header[BUFFER_SIZE];
-    sprintf(response_header, "%s 200 OK\r\nContent-Type: %s\r\nContent-Length: %ld\r\nETag: %s\r\nConnection: %s\r\n\r\n", HTTP_VERSION, file_type, file_size, etag, connection_header_value(request));
-    request->status = HTTP_200_CODE;
+    const char* extra_headers[] = { etag_header };
 
+    response_build_headers(response_header, BUFFER_SIZE, file_type, HTTP_200_STATUS_LINE, file_size, request->close_connection, extra_headers, 1);
+
+    request->status = HTTP_200_CODE;
 
     if (send_all(client_socket, response_header, strlen(response_header)) == -1) {
         fprintf(stderr, "Error sending file response.\n");
@@ -387,22 +387,6 @@ void send_file_response(Server* server, Request* request, int client_socket, con
     if (strcmp(request->method, HTTP_HEAD) == 0) {
         request->bytes = 0;
     }        
-}
-
-void send_301_response(Request *request, int client_socket, const char *new_location) {
-    char location[BUFFER_SIZE];
-    snprintf(location, BUFFER_SIZE, "Location: %s", new_location);
-    const char* extra_header[] = { location };
-
-    if (send_response(request, client_socket, HTTP_301_CODE, HTTP_301_STATUS_LINE, TEXT_CONTENT_TYPE, NULL, 0, extra_header, 1) == -1) {
-        fprintf(stderr, "Error sending 301 response.\n");
-    }
-}
-
-void send_304_response(Request *request, int client_socket) {
-    if (send_response(request, client_socket, HTTP_304_CODE, HTTP_304_STATUS_LINE, TEXT_CONTENT_TYPE, NULL, 0, NO_EXTRA, 0) == -1) {
-        fprintf(stderr, "Error sending 304 response.\n");
-    }
 }
 
 static int send_all(int socket_fd, const char* buffer, size_t len) {
@@ -455,12 +439,6 @@ static void close_socket(int socket_fd) {
     }
 }
 
-static char* connection_header_value(Request* request) {
-    if (request->close_connection) {
-        return "close";
-    }
-    return "keep-alive";
-}
 
 static int send_response(
     Request* request, 
@@ -494,7 +472,7 @@ static int send_response(
 
 static void send_cached_file(Request* request, int client_socket, FileCache* cached_item) {
     char etag[ETAG_SIZE];
-    build_etag(etag, ETAG_SIZE, cached_item->mtime, cached_item->size);
+    build_etag(etag, NULL, ETAG_SIZE, 0, cached_item->mtime, cached_item->size);
 
     if (request->if_none_match != NULL && strcmp(request->if_none_match, etag) == 0) {
         send_304_response(request, client_socket);
@@ -523,6 +501,3 @@ static void send_cached_file(Request* request, int client_socket, FileCache* cac
     }        
 }
 
-static void build_etag(char* etag, size_t etag_size, uint64_t mtime, uint64_t size) {
-    snprintf(etag, etag_size, "\"%llx-%llx\"", mtime, size);
-}

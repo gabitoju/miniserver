@@ -14,7 +14,7 @@ size_t response_build_headers(
 ) {
     size_t total = 0;
 
-    int n = snprintf(buffer + total, buffer_size - total, "%s", status_line);
+    int n = snprintf(buffer + total, buffer_size - total, "%s\r\n", status_line);
 
     total += (n > 0) ? n : 0;
     
@@ -28,10 +28,16 @@ size_t response_build_headers(
                 "Content-Length: %zu\r\n"
                 "Connection: %s\r\n"
                 "\r\n",
-                 content_type, content_length, connection_close ? "close ": "keep-alive"
+                 content_type, content_length, connection_close ? "close": "keep-alive"
                 );
 
     total += (n > 0) ? n : 0;
-
     return total;
+}
+
+void build_etag(char* etag, char* header, size_t etag_size, size_t header_size, uint64_t mtime, uint64_t size) {
+    snprintf(etag, etag_size, "\"%jx-%jx\"", (uintmax_t)mtime, (uintmax_t)size);
+    if (header) {
+        snprintf(header, header_size, "ETag: %s", etag);
+    }
 }
