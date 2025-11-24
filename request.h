@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdlib.h>
+#include <string.h>
 #include "config.h"
 
 typedef struct {
@@ -24,6 +25,11 @@ typedef struct {
 Request parse_request(Config* config, char* raw_request);
 
 void request_resolve_ip(Request* request, const char* client_ip);
+
+static inline int request_is_path_traversal(const Request* request) {
+    return request->path && strstr(request->path, "..");
+}
+
 void free_request(Request* request);
 
 #endif // REQUEST_H

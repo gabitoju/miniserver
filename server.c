@@ -36,6 +36,7 @@ volatile sig_atomic_t server_running = 1;
 
 static int send_response(Request* request, int client_socket, int status_code, const char* status_line, const char* content_type, const char* body, size_t body_len, const char* extra_headers[], size_t extra_count);
 static int send_all(int socket_fd, const char* buffer, size_t len);
+static void end_connection(Request* request, int client_socket);
 static void close_socket(int socket_fd);
 
 static void send_cached_file(Request* request, int client_socket, FileCache* cached_item);
@@ -180,10 +181,7 @@ void handle_connection(Server* server, int client_socket, const char* client_ip)
         size_t remaining = 0;
         while (total_received < BUFFER_SIZE) {
             remaining = BUFFER_SIZE - total_received;
-            ssize_t bytes_received = recv(client_socket,
-                                         buffer + total_received,
-                                         remaining,
-                                         0);
+            ssize_t bytes_received = recv(client_socket, buffer + total_received, remaining, 0);
 
             if (bytes_received <= 0) {
                 close_socket(client_socket);
@@ -198,8 +196,7 @@ void handle_connection(Server* server, int client_socket, const char* client_ip)
         }
 
         Request request = parse_request(server->config, buffer);
-
-        if (request.path && strstr(request.path, "..")) {
+        if (request_is_path_traversal(&request)) {
             send_403_response(&request, client_socket);
             free_request(&request);
             return;
@@ -208,8 +205,7 @@ void handle_connection(Server* server, int client_socket, const char* client_ip)
         request_resolve_ip(&request, client_ip);
 
         if (request.method == NULL) {
-            close_socket(client_socket);
-            free_request(&request);
+            end_connection(&request, client_socket);
             return;
         }
 
@@ -415,24 +411,6 @@ static int send_all(int socket_fd, const char* buffer, size_t len) {
     return 0;
 }
 
-void log_request(Request* request) {
-    time_t now = time(0);
-    char time_buff[100];
-    strftime(time_buff, sizeof(time_buff), "%d/%b/%Y:%H:%M:%S %z", localtime(&now));
-
-    printf("%s - - [%s] \"%s %s %s\" %d %zu \"%s\" \"%s\"\n",
-        request->host ? request->host : "unknown",
-        time_buff,
-        request->method,
-        request->path,
-        request->version,
-        request->status,
-        request->bytes,
-        request->referer ? request->referer : "-",
-        request->user_agent ? request->user_agent : "unknown"
-    );
-}
-
 static void close_socket(int socket_fd) {
     if (socket_fd >= 0) {
         close(socket_fd);
@@ -501,3 +479,7 @@ static void send_cached_file(Request* request, int client_socket, FileCache* cac
     }        
 }
 
+static void end_connection(Request* request, int client_socket) {
+    close_socket(client_socket);
+    free_request(request);
+}
