@@ -1,3 +1,4 @@
+#include <stdint.h>
 #define _GNU_SOURCE
 
 #include "request.h"
@@ -5,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 
 #define MAX_METHOD_SIZE 16
 #define MAX_PATH_SIZE 256
@@ -90,6 +92,19 @@ Request parse_request(Config* config, char* raw_request) {
                 strncpy(req.if_none_match, line + 15, MAX_HEADER_SIZE - 1);
             }
             req.if_none_match[MAX_HEADER_SIZE - 1] = '\0';
+        } else if (strncasecmp(line, "Content-Type:", 13) == 0) {
+            const char* value = line + 13;
+
+            while (*value == ' ' || *value == '\t') {
+                value++;
+            }
+
+            req.content_type = malloc(strlen(value) + 1);
+            if (req.content_type) {
+                strcpy(req.content_type, value);
+            }
+        } else if (strncasecmp(line, "Transfer-Encoding:", 18) == 0) {
+            req.bad_request = 1;
         } else if (strncasecmp(line, header_ip_buffer, strlen(header_ip_buffer)) == 0) {
             req.real_ip = malloc(MAX_HEADER_SIZE);
             if (req.real_ip) {
@@ -98,6 +113,34 @@ Request parse_request(Config* config, char* raw_request) {
             req.real_ip[MAX_HEADER_SIZE - 1] = '\0';
         } else if (strncasecmp(line, "Connection: close", 17) == 0) {
             req.close_connection = 1;
+        } else if (strncasecmp(line, "Content-Length:", 15) == 0) {
+            if (req.has_content_length) {
+                req.bad_request = 1;
+                continue;
+            }
+
+            req.has_content_length = 1;
+            const char* value = line + 15;
+
+            while (*value == ' ' || *value == '\t') {
+                value++;
+            }
+
+            errno = 0;
+            char *endptr;
+            unsigned long long length = strtoull(value, &endptr, 10);
+
+            if (
+                value[0] != '\0' &&
+                value[0] != '-' &&
+                errno == 0 &&
+                *endptr == '\0' &&
+                length <= SIZE_MAX
+            ) {
+                req.content_length = (size_t)length;
+            } else {
+                req.bad_request = 1;
+            }
         }
     }
     return req;
@@ -130,4 +173,6 @@ void free_request(Request *request) {
     free(request->query_params);
     free(request->client_ip);
     free(request->real_ip);
+    free(request->content_type);
+    free(request->body);
 }

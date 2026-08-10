@@ -11,6 +11,7 @@ int main(int argc, char* argv[]) {
 
     Config config = {
         .port = DEFAULT_PORT,
+        .max_body_size = DEFAULT_MAX_BODY_SIZE,
         .content_path = ".",
         .config_file = CONFIG_FILE,
         .mime_types_path = MIME_TYPES_DATABASE,

@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include <stdint.h>
 
 void read_config(Config* config) {
 
@@ -31,6 +32,9 @@ void read_config(Config* config) {
             if ((errno != ERANGE) && (endptr != svalue) && (*endptr == '\0')) {
                 if (strcmp(key, "port") == 0) {
                     config->port = (int)ivalue;
+                }
+                if (strcmp(key, "max_body_size") == 0 && ivalue >= 0) {
+                    config->max_body_size = (size_t)ivalue;
                 }
             } else {
                 if (strcmp(key, "content_path") == 0) {

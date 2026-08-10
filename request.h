@@ -9,6 +9,9 @@
 typedef struct {
     int status;
     size_t bytes;
+    size_t content_length;
+    int has_content_length;
+    int bad_request;
     int close_connection;
     char* method;
     char* path;
@@ -20,6 +23,8 @@ typedef struct {
     char* referer;
     char* if_none_match;
     char* query_params;
+    char* content_type;
+    char* body;
 } Request;
 
 Request parse_request(Config* config, char* raw_request);

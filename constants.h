@@ -19,6 +19,7 @@
 
 #define HTTP_GET "GET"
 #define HTTP_HEAD "HEAD"
+#define HTTP_POST "POST"
 
 #define MIME_TYPES_DATABASE "/etc/gabitojusrv/mime.types"
 #define DEFAULT_MIME "application/octet-stream"
@@ -30,12 +31,28 @@
 
 #define CACHE_SIZE 256
 #define CACHE_TTL 60
+#define DEFAULT_MAX_BODY_SIZE (1024 * 1024)
 
 #define MAX_KEEPALIVE_REQUESTS 1000
 
 #define HTTP_200_CODE 200
 #define HTTP_200_MESSAGE "200 Ok"
 #define HTTP_200_STATUS_LINE HTTP_VERSION " " HTTP_200_MESSAGE
+
+#define HTTP_400_CODE 400
+#define HTTP_400_MESSAGE "400 Bad Request"
+#define HTTP_400_MESSAGE_LEN 15
+#define HTTP_400_STATUS_LINE HTTP_VERSION " " HTTP_400_MESSAGE
+
+#define HTTP_413_CODE 413
+#define HTTP_413_MESSAGE "413 Payload Too Large"
+#define HTTP_413_MESSAGE_LEN 21
+#define HTTP_413_STATUS_LINE HTTP_VERSION " " HTTP_413_MESSAGE
+
+#define HTTP_500_CODE 500
+#define HTTP_500_MESSAGE "500 Internal Server Error"
+#define HTTP_500_MESSAGE_LEN 25
+#define HTTP_500_STATUS_LINE HTTP_VERSION " " HTTP_500_MESSAGE
 
 #define HTTP_403_CODE 403
 #define HTTP_403_MESSAGE "403 Forbidden"
@@ -51,7 +68,7 @@
 #define HTTP_405_MESSAGE "405 Method Not Allowed"
 #define HTTP_405_MESSAGE_LEN 22
 #define HTTP_405_STATUS_LINE HTTP_VERSION " " HTTP_405_MESSAGE
-#define HTTP_405_EXTRA_HEADER "Allow: GET, HEAD"
+#define HTTP_405_EXTRA_HEADER "Allow: GET, HEAD, POST"
 
 #define HTTP_304_CODE 304
 #define HTTP_304_MESSAGE "304 Not Modified"

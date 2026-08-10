@@ -38,8 +38,24 @@ static int send_response(Request* request, int client_socket, int status_code, c
 static int send_all(int socket_fd, const char* buffer, size_t len);
 static void end_connection(Request* request, int client_socket);
 static void close_socket(int socket_fd);
+static const char* find_header_end(const char* buffer, size_t length);
+static void handle_post_request(Request* request, int client_socket);
 
 static void send_cached_file(Request* request, int client_socket, FileCache* cached_item);
+
+static const char* find_header_end(const char* buffer, size_t length) {
+    if (length < 4) {
+        return NULL;
+    }
+
+    for (size_t i = 0; i <= length - 4; i++) {
+        if (memcmp(buffer + i, "\r\n\r\n", 4) == 0) {
+            return buffer + i + 4;
+        }
+    }
+
+    return NULL;
+}
 
 static ssize_t portable_sendfile(int out_fd, int in_fd, off_t *offset, size_t count) {
 #if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
@@ -175,12 +191,14 @@ void handle_connection(Server* server, int client_socket, const char* client_ip)
     setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
    
     int requests_served = 0;
+    char buffer[BUFFER_SIZE];
+    size_t total_received = 0;
+
     while ((++requests_served) < MAX_KEEPALIVE_REQUESTS) {
-        char buffer[BUFFER_SIZE] = {0};
-        size_t total_received = 0;
-        size_t remaining = 0;
-        while (total_received < BUFFER_SIZE) {
-            remaining = BUFFER_SIZE - total_received;
+        const char* header_end = find_header_end(buffer, total_received);
+
+        while (header_end == NULL && total_received < sizeof(buffer) - 1) {
+            size_t remaining = sizeof(buffer) - 1 - total_received;
             ssize_t bytes_received = recv(client_socket, buffer + total_received, remaining, 0);
 
             if (bytes_received <= 0) {
@@ -190,16 +208,80 @@ void handle_connection(Server* server, int client_socket, const char* client_ip)
 
             total_received += (size_t)bytes_received;
 
-            if ((size_t)bytes_received < remaining) {
+            header_end = find_header_end(buffer, total_received);
+            if (header_end != NULL) {
                 break;
             }
         }
 
+        if (header_end == NULL) {
+            Request request = { .close_connection = 1 };
+            send_400_response(&request, client_socket);
+            close_socket(client_socket);
+            return;
+        }
+
+        size_t header_length = (size_t)(header_end - buffer);
+        size_t body_received = total_received - header_length;
+        buffer[header_length - 4] = '\0';
+
         Request request = parse_request(server->config, buffer);
+        if (request.bad_request) {
+            request.close_connection = 1;
+            send_400_response(&request, client_socket);
+            free_request(&request);
+            return;
+        }
+
         if (request_is_path_traversal(&request)) {
             send_403_response(&request, client_socket);
             free_request(&request);
             return;
+        }
+
+        if (request.content_length > server->config->max_body_size) {
+            request.close_connection = 1;
+            send_413_response(&request, client_socket);
+            free_request(&request);
+            close_socket(client_socket);
+            return;
+        }
+
+        if (request.content_length > 0) {
+            request.body = malloc(request.content_length + 1);
+            if (request.body == NULL) {
+                request.close_connection = 1;
+                log_error(server, "Unable to allocate request body.\n");
+                send_500_response(&request, client_socket);
+                free_request(&request);
+                close_socket(client_socket);
+                return;
+            }
+
+            size_t body_to_copy = body_received < request.content_length ? body_received : request.content_length;
+            memcpy(request.body, header_end, body_to_copy);
+
+            size_t body_remaining = request.content_length - body_to_copy;
+            size_t body_offset = body_to_copy;
+            while (body_remaining > 0) {
+                ssize_t bytes_received = recv(client_socket, request.body + body_offset, body_remaining, 0);
+                if (bytes_received <= 0) {
+                    close_socket(client_socket);
+                    free_request(&request);
+                    return;
+                }
+
+                body_offset += (size_t)bytes_received;
+                body_remaining -= (size_t)bytes_received;
+            }
+            request.body[request.content_length] = '\0';
+        }
+
+        if (body_received > request.content_length) {
+            total_received = body_received - request.content_length;
+            memmove(buffer, header_end + request.content_length, total_received);
+        } else {
+            total_received = 0;
         }
 
         request_resolve_ip(&request, client_ip);
@@ -225,7 +307,37 @@ void handle_request(Server* server, Request *request, int client_socket) {
         send_file_response(server, request, client_socket, request->path);
         return;
     }
+
+    if (strcmp(request->method, HTTP_POST) == 0) {
+        handle_post_request(request, client_socket);
+        return;
+    }
+
     send_405_response(request, client_socket);
+}
+
+static void handle_post_request(Request* request, int client_socket) {
+    if (send_response(request, client_socket, HTTP_200_CODE, HTTP_200_STATUS_LINE, TEXT_CONTENT_TYPE, NULL, 0, NO_EXTRA, 0) == -1) {
+        fprintf(stderr, "Error sending POST response.\n");
+    }
+}
+
+void send_400_response(Request* request, int client_socket) {
+    if (send_response(request, client_socket, HTTP_400_CODE, HTTP_400_STATUS_LINE, TEXT_CONTENT_TYPE, HTTP_400_MESSAGE, HTTP_400_MESSAGE_LEN, NO_EXTRA, 0) == -1) {
+        fprintf(stderr, "Error sending 400 response.\n");
+    }
+}
+
+void send_413_response(Request* request, int client_socket) {
+    if (send_response(request, client_socket, HTTP_413_CODE, HTTP_413_STATUS_LINE, TEXT_CONTENT_TYPE, HTTP_413_MESSAGE, HTTP_413_MESSAGE_LEN, NO_EXTRA, 0) == -1) {
+        fprintf(stderr, "Error sending 413 response.\n");
+    }
+}
+
+void send_500_response(Request* request, int client_socket) {
+    if (send_response(request, client_socket, HTTP_500_CODE, HTTP_500_STATUS_LINE, TEXT_CONTENT_TYPE, HTTP_500_MESSAGE, HTTP_500_MESSAGE_LEN, NO_EXTRA, 0) == -1) {
+        fprintf(stderr, "Error sending 500 response.\n");
+    }
 }
 
 void send_403_response(Request* request, int client_socket) {
