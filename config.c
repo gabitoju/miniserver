@@ -61,9 +61,14 @@ void read_config(Config* config) {
                 }
             } else {
                 if (strcmp(key, "content_path") == 0) {
-                    config->content_path = malloc(strlen(svalue) + 1);
-                    if (config->content_path) {
-                        strcpy(config->content_path, svalue);
+                    char* content_path = malloc(strlen(svalue) + 1);
+                    if (content_path) {
+                        strcpy(content_path, svalue);
+                        if (config->content_path_owned) {
+                            free(config->content_path);
+                        }
+                        config->content_path = content_path;
+                        config->content_path_owned = 1;
                     }
                 }
                 if (strcmp(key, "mime_types_path") == 0) {

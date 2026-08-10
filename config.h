@@ -16,6 +16,7 @@ typedef struct  {
     size_t max_body_size;
     char* config_file;
     char* content_path;
+    int content_path_owned;
     char* real_ip_header;
     char* mime_types_path;
     char* access_log_path;

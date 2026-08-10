@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 
 #include "response.h"
 
@@ -23,12 +24,13 @@ size_t response_build_headers(
         total += (n > 0) ? n : 0;
     }
 
+    const char* charset = strchr(content_type, ';') ? "" : "; charset=utf-8";
     n = snprintf(buffer + total, buffer_size - total, 
-                "Content-Type: %s; charset=utf-8\r\n"
+                "Content-Type: %s%s\r\n"
                 "Content-Length: %zu\r\n"
                 "Connection: %s\r\n"
                 "\r\n",
-                 content_type, content_length, connection_close ? "close": "keep-alive"
+                 content_type, charset, content_length, connection_close ? "close": "keep-alive"
                 );
 
     total += (n > 0) ? n : 0;

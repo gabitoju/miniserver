@@ -88,6 +88,17 @@ static void sigchld_handler(int s) {
 }
 
 int server_init(Server * server) {
+    char* content_path = realpath(server->config->content_path, NULL);
+    if (content_path == NULL) {
+        perror("content path failed");
+        return -1;
+    }
+    if (server->config->content_path_owned) {
+        free(server->config->content_path);
+    }
+    server->config->content_path = content_path;
+    server->config->content_path_owned = 1;
+
     if ((server->fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         perror("socket failed");
         return -1;
@@ -178,7 +189,9 @@ void server_run(Server* server) {
 }
 
 void server_destroy(Server* server) {
-    free(server->config->content_path);
+    if (server->config->content_path_owned) {
+        free(server->config->content_path);
+    }
     free(server->config->mime_types_path);
     config_destroy_cgi_handlers(server->config);
     mime_destroy();
