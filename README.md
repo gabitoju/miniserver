@@ -13,6 +13,7 @@ A simple, multi-process HTTP/1.1 server written in C. It is designed to be small
 *   **Logging:** Provides separate, configurable log files for access and error reporting.
 *   **ETag Support:** Generates and validates ETags for cache control, supporting `304 Not Modified` responses.
 *   **POST Request Handling:** Safely receives request bodies with a configurable size limit and acknowledges generic `POST` requests.
+*   **CGI Support:** Runs configured script extensions through POSIX CGI executables.
 *   **Security:** Includes basic protection against directory traversal attacks.
 
 ## Internals
@@ -26,6 +27,7 @@ The server is built with a modular structure.
 *   **`log.c`**: Provides functions for access and error logging.
 *   **`cache.c`**: Implements a fixed-size LRU cache for file metadata. It uses a hash map for fast lookups and a doubly linked list to manage item recency.
 *   **`mime.c` / `hashmap.c`**: Implements a hash map to load and query MIME types from the `mime.types` file.
+*   **`cgi.c` / `cgi.h`**: Executes configured CGI scripts and translates their output into HTTP responses.
 
 ## Limitations
 
@@ -99,6 +101,9 @@ error_log_path /var/log/gabitojusrv/error.log
 
 # Header for identifying the real client IP
 real_ip_header X-Forwarded-For
+
+# Run matching extensions as CGI scripts
+cgi_handler .pol /usr/local/bin/polonio
 ```
 
 **Configuration Options**
@@ -112,6 +117,7 @@ real_ip_header X-Forwarded-For
 | `access_log_path` | Path to the access log file.              | `/var/log/gabitojusrv/access.log`   |
 | `error_log_path`  | Path to the error log file.               | `/var/log/gabitojusrv/error.log`    |
 | `real_ip_header`  | HTTP header to use for the real client IP.| `X-Forwarded-For`                   |
+| `cgi_handler`     | Maps an extension to a CGI executable; may be repeated. | None                    |
 
 ### Running the Server
 

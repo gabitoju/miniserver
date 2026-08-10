@@ -21,6 +21,7 @@
 #include "request.h"
 #include "mime.h"
 #include "cache.h"
+#include "cgi.h"
 #include "response.h"
 
 #if defined(__linux__)
@@ -40,6 +41,7 @@ static void end_connection(Request* request, int client_socket);
 static void close_socket(int socket_fd);
 static const char* find_header_end(const char* buffer, size_t length);
 static void handle_post_request(Request* request, int client_socket);
+static int handle_cgi(Server* server, Request* request, int client_socket, const char* executable);
 
 static void send_cached_file(Request* request, int client_socket, FileCache* cached_item);
 
@@ -178,6 +180,7 @@ void server_run(Server* server) {
 void server_destroy(Server* server) {
     free(server->config->content_path);
     free(server->config->mime_types_path);
+    config_destroy_cgi_handlers(server->config);
     mime_destroy();
     cache_destroy(server->cache);
     close(server->fd);
@@ -303,6 +306,16 @@ void handle_connection(Server* server, int client_socket, const char* client_ip)
 }
 
 void handle_request(Server* server, Request *request, int client_socket) {
+    const char* cgi_executable = config_cgi_handler(server->config, request->path);
+    if (cgi_executable != NULL && (strcmp(request->method, HTTP_GET) == 0 || strcmp(request->method, HTTP_HEAD) == 0 || strcmp(request->method, HTTP_POST) == 0)) {
+        if (handle_cgi(server, request, client_socket, cgi_executable) == -1) {
+            log_error(server, "Unable to handle CGI request.\n");
+            request->close_connection = 1;
+            send_500_response(request, client_socket);
+        }
+        return;
+    }
+
     if (strcmp(request->method, HTTP_GET) == 0 || strcmp(request->method, HTTP_HEAD) == 0) {
         send_file_response(server, request, client_socket, request->path);
         return;
@@ -314,6 +327,34 @@ void handle_request(Server* server, Request *request, int client_socket) {
     }
 
     send_405_response(request, client_socket);
+}
+
+static int handle_cgi(Server* server, Request* request, int client_socket, const char* executable) {
+    char full_path[BUFFER_SIZE];
+    snprintf(full_path, sizeof(full_path), "%s%s", server->config->content_path, request->path);
+
+    char* script_path = realpath(full_path, NULL);
+    if (script_path == NULL) {
+        send_404_response(request, client_socket);
+        return 0;
+    }
+
+    if (strncmp(script_path, server->config->content_path, strlen(server->config->content_path)) != 0) {
+        free(script_path);
+        send_403_response(request, client_socket);
+        return 0;
+    }
+
+    struct stat path_stats;
+    if (stat(script_path, &path_stats) != 0 || !S_ISREG(path_stats.st_mode)) {
+        free(script_path);
+        send_404_response(request, client_socket);
+        return 0;
+    }
+
+    int result = cgi_handle_request(request, client_socket, script_path, executable, server->config->port);
+    free(script_path);
+    return result;
 }
 
 static void handle_post_request(Request* request, int client_socket) {

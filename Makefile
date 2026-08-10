@@ -2,8 +2,8 @@ CC ?= gcc
 CFLAGS ?= -Wall -Wextra -std=gnu23 -g
 CPPFLAGS ?=
 LDFLAGS ?=
-DEPS = server.h request.h constants.h mime.h list.h hashmap.h log.h config.h cache.h helpers.h response.h
-OBJ = srv.o server.o request.o mime.o list.o hashmap.o log.o config.o cache.o response.o
+DEPS = server.h request.h constants.h mime.h list.h hashmap.h log.h config.h cache.h response.h cgi.h
+OBJ = srv.o server.o request.o mime.o list.o hashmap.o log.o config.o cache.o response.o cgi.o
 RM = rm -f
 
 # Build rule

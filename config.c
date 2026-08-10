@@ -24,7 +24,30 @@ void read_config(Config* config) {
 
             char* key = strtok_r(buffer, " ", &saveptr);
             char* svalue = strtok_r(NULL, " ", &saveptr);
+            char* third_value = strtok_r(NULL, " ", &saveptr);
+            if (key == NULL || svalue == NULL) {
+                continue;
+            }
             svalue[strcspn(svalue, "\n")] = 0;
+
+            if (strcmp(key, "cgi_handler") == 0) {
+                if (third_value != NULL && config->cgi_handler_count < MAX_CGI_HANDLERS) {
+                    third_value[strcspn(third_value, "\n")] = 0;
+                    CgiHandler* handler = &config->cgi_handlers[config->cgi_handler_count];
+                    handler->extension = strdup(svalue);
+                    handler->executable = strdup(third_value);
+                    if (handler->extension != NULL && handler->executable != NULL) {
+                        config->cgi_handler_count++;
+                    } else {
+                        free(handler->extension);
+                        free(handler->executable);
+                        handler->extension = NULL;
+                        handler->executable = NULL;
+                    }
+                }
+                continue;
+            }
+
             char* endptr;
             errno = 0;
             long ivalue = strtol(svalue, &endptr, 10);
@@ -70,5 +93,31 @@ void read_config(Config* config) {
             }
         }
         fclose(file);
+    }
+}
+
+const char* config_cgi_handler(const Config* config, const char* path) {
+    if (path == NULL) {
+        return NULL;
+    }
+
+    const char* extension = strrchr(path, '.');
+    if (extension == NULL) {
+        return NULL;
+    }
+
+    for (int i = 0; i < config->cgi_handler_count; i++) {
+        if (strcmp(extension, config->cgi_handlers[i].extension) == 0) {
+            return config->cgi_handlers[i].executable;
+        }
+    }
+
+    return NULL;
+}
+
+void config_destroy_cgi_handlers(Config* config) {
+    for (int i = 0; i < config->cgi_handler_count; i++) {
+        free(config->cgi_handlers[i].extension);
+        free(config->cgi_handlers[i].executable);
     }
 }
