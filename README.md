@@ -13,7 +13,7 @@ A simple, multi-process HTTP/1.1 server written in C. It is designed to be small
 *   **Logging:** Provides separate, configurable log files for access and error reporting.
 *   **ETag Support:** Generates and validates ETags for cache control, supporting `304 Not Modified` responses.
 *   **POST Request Handling:** Safely receives request bodies with a configurable size limit and acknowledges generic `POST` requests.
-*   **CGI Support:** Runs configured script extensions through POSIX CGI executables.
+*   **CGI Support:** Runs configured script extensions through POSIX CGI executables. Scripts are identified by the standard `SCRIPT_FILENAME` environment variable.
 *   **Security:** Includes basic protection against directory traversal attacks.
 
 ## Internals

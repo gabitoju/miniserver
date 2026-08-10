@@ -89,7 +89,7 @@ int cgi_handle_request(Request* request, int client_socket, const char* script_p
             setenv("CONTENT_TYPE", request->content_type, 1);
         }
 
-        execl(executable, executable, script_path, (char*)NULL);
+        execl(executable, executable, (char*)NULL);
         _exit(127);
     }
 
