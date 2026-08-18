@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include "constants.h"
 #include "config.h"
 
 typedef struct {
@@ -25,11 +26,13 @@ typedef struct {
     char* query_params;
     char* content_type;
     char* body;
+    char request_id[REQUEST_ID_MAX];
 } Request;
 
 Request parse_request(Config* config, char* raw_request);
 
 void request_resolve_ip(Request* request, const char* client_ip);
+void request_assign_id(Request* request);
 
 static inline int request_is_path_traversal(const Request* request) {
     return request->path && strstr(request->path, "..");

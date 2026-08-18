@@ -7,11 +7,56 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <time.h>
+#include <unistd.h>
 
 #define MAX_METHOD_SIZE 16
 #define MAX_PATH_SIZE 256
 #define MAX_VERSION_SIZE 16
 #define MAX_HEADER_SIZE 1024
+
+static int request_id_is_valid(const char* value) {
+    size_t length = strlen(value);
+    if (length == 0 || length >= REQUEST_ID_MAX) {
+        return 0;
+    }
+    for (size_t i = 0; i < length; i++) {
+        unsigned char c = (unsigned char)value[i];
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+              (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-')) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+void request_assign_id(Request* request) {
+    if (request_id_is_valid(request->request_id)) {
+        return;
+    }
+
+    unsigned char random_bytes[16];
+    int random_fd = open("/dev/urandom", O_RDONLY);
+    if (random_fd >= 0 && read(random_fd, random_bytes, sizeof(random_bytes)) == (ssize_t)sizeof(random_bytes)) {
+        close(random_fd);
+        for (size_t i = 0; i < sizeof(random_bytes); i++) {
+            snprintf(request->request_id + (i * 2), 3, "%02x", random_bytes[i]);
+        }
+        return;
+    }
+    if (random_fd >= 0) {
+        close(random_fd);
+    }
+
+    static unsigned long sequence = 0;
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    sequence++;
+    snprintf(request->request_id, sizeof(request->request_id), "%lx-%lx-%lx-%lx",
+        (unsigned long)now.tv_sec, (unsigned long)now.tv_nsec,
+        (unsigned long)getpid(), sequence);
+}
 
 Request parse_request(Config* config, char* raw_request) {
     Request req = {0}; // Initialize all fields to NULL/0
@@ -92,6 +137,14 @@ Request parse_request(Config* config, char* raw_request) {
                 strncpy(req.if_none_match, line + 15, MAX_HEADER_SIZE - 1);
             }
             req.if_none_match[MAX_HEADER_SIZE - 1] = '\0';
+        } else if (strncasecmp(line, "X-Request-ID:", 13) == 0) {
+            const char* value = line + 13;
+            while (*value == ' ' || *value == '\t') {
+                value++;
+            }
+            if (request_id_is_valid(value)) {
+                snprintf(req.request_id, sizeof(req.request_id), "%s", value);
+            }
         } else if (strncasecmp(line, "Content-Type:", 13) == 0) {
             const char* value = line + 13;
 

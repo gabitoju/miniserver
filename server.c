@@ -37,11 +37,12 @@ volatile sig_atomic_t server_running = 1;
 
 static int send_response(Request* request, int client_socket, int status_code, const char* status_line, const char* content_type, const char* body, size_t body_len, const char* extra_headers[], size_t extra_count);
 static int send_all(int socket_fd, const char* buffer, size_t len);
-static void end_connection(Request* request, int client_socket);
 static void close_socket(int socket_fd);
 static const char* find_header_end(const char* buffer, size_t length);
 static void handle_post_request(Request* request, int client_socket);
 static int handle_cgi(Server* server, Request* request, int client_socket, const char* executable);
+static double elapsed_ms(const struct timespec* started_at);
+static void log_completed_request(Server* server, Request* request, const struct timespec* started_at);
 
 static void send_cached_file(Request* request, int client_socket, FileCache* cached_item);
 
@@ -57,6 +58,18 @@ static const char* find_header_end(const char* buffer, size_t length) {
     }
 
     return NULL;
+}
+
+static double elapsed_ms(const struct timespec* started_at) {
+    struct timespec finished_at;
+    clock_gettime(CLOCK_MONOTONIC, &finished_at);
+    time_t seconds = finished_at.tv_sec - started_at->tv_sec;
+    long nanoseconds = finished_at.tv_nsec - started_at->tv_nsec;
+    return ((double)seconds * 1000.0) + ((double)nanoseconds / 1000000.0);
+}
+
+static void log_completed_request(Server* server, Request* request, const struct timespec* started_at) {
+    log_access_request(server, request, elapsed_ms(started_at));
 }
 
 static ssize_t portable_sendfile(int out_fd, int in_fd, off_t *offset, size_t count) {
@@ -211,6 +224,8 @@ void handle_connection(Server* server, int client_socket, const char* client_ip)
     size_t total_received = 0;
 
     while ((++requests_served) < MAX_KEEPALIVE_REQUESTS) {
+        struct timespec started_at;
+        clock_gettime(CLOCK_MONOTONIC, &started_at);
         const char* header_end = find_header_end(buffer, total_received);
 
         while (header_end == NULL && total_received < sizeof(buffer) - 1) {
@@ -232,7 +247,11 @@ void handle_connection(Server* server, int client_socket, const char* client_ip)
 
         if (header_end == NULL) {
             Request request = { .close_connection = 1 };
+            request_resolve_ip(&request, client_ip);
+            request_assign_id(&request);
             send_400_response(&request, client_socket);
+            log_completed_request(server, &request, &started_at);
+            free_request(&request);
             close_socket(client_socket);
             return;
         }
@@ -242,22 +261,29 @@ void handle_connection(Server* server, int client_socket, const char* client_ip)
         buffer[header_length - 4] = '\0';
 
         Request request = parse_request(server->config, buffer);
-        if (request.bad_request) {
+        request_resolve_ip(&request, client_ip);
+        request_assign_id(&request);
+        if (request.bad_request || request.method == NULL || request.path == NULL || request.version == NULL) {
             request.close_connection = 1;
             send_400_response(&request, client_socket);
+            log_completed_request(server, &request, &started_at);
             free_request(&request);
+            close_socket(client_socket);
             return;
         }
 
         if (request_is_path_traversal(&request)) {
             send_403_response(&request, client_socket);
+            log_completed_request(server, &request, &started_at);
             free_request(&request);
+            close_socket(client_socket);
             return;
         }
 
         if (request.content_length > server->config->max_body_size) {
             request.close_connection = 1;
             send_413_response(&request, client_socket);
+            log_completed_request(server, &request, &started_at);
             free_request(&request);
             close_socket(client_socket);
             return;
@@ -269,6 +295,7 @@ void handle_connection(Server* server, int client_socket, const char* client_ip)
                 request.close_connection = 1;
                 log_error(server, "Unable to allocate request body.\n");
                 send_500_response(&request, client_socket);
+                log_completed_request(server, &request, &started_at);
                 free_request(&request);
                 close_socket(client_socket);
                 return;
@@ -300,15 +327,8 @@ void handle_connection(Server* server, int client_socket, const char* client_ip)
             total_received = 0;
         }
 
-        request_resolve_ip(&request, client_ip);
-
-        if (request.method == NULL) {
-            end_connection(&request, client_socket);
-            return;
-        }
-
         handle_request(server, &request, client_socket);
-        log_access_request(server, &request);
+        log_completed_request(server, &request, &started_at);
         free_request(&request);
 
         if (request.close_connection) {
@@ -511,7 +531,7 @@ void send_file_response(Server* server, Request* request, int client_socket, con
     char response_header[BUFFER_SIZE];
     const char* extra_headers[] = { etag_header };
 
-    response_build_headers(response_header, BUFFER_SIZE, file_type, HTTP_200_STATUS_LINE, file_size, request->close_connection, extra_headers, 1);
+    response_build_headers(response_header, BUFFER_SIZE, file_type, HTTP_200_STATUS_LINE, file_size, request->close_connection, extra_headers, 1, request->request_id);
 
     request->status = HTTP_200_CODE;
 
@@ -599,7 +619,7 @@ static int send_response(
     request->status = status_code;
     request->bytes = body_len;
 
-    size_t headers_size = response_build_headers(headers, BUFFER_SIZE, content_type, status_line, body_len, request->close_connection, extra_headers, extra_count);
+    size_t headers_size = response_build_headers(headers, BUFFER_SIZE, content_type, status_line, body_len, request->close_connection, extra_headers, extra_count, request->request_id);
 
     if (send_all(client_socket, headers, headers_size) == -1) {
         return -1;
@@ -623,9 +643,16 @@ static void send_cached_file(Request* request, int client_socket, FileCache* cac
         return;
     }
 
+    char etag_header[BUFFER_SIZE];
+    build_etag(etag, etag_header, ETAG_SIZE, sizeof(etag_header), cached_item->mtime, cached_item->size);
+    const char* extra_headers[] = { etag_header };
+    char headers[BUFFER_SIZE];
+    response_build_headers(headers, sizeof(headers), cached_item->mime_type, HTTP_200_STATUS_LINE,
+        cached_item->size, request->close_connection, extra_headers, 1, request->request_id);
+
     request->status = HTTP_200_CODE;
 
-    if (send_all(client_socket, cached_item->headers, strlen(cached_item->headers)) == -1) {
+    if (send_all(client_socket, headers, strlen(headers)) == -1) {
         fprintf(stderr, "Error sending file response.\n");
     }
 
@@ -643,9 +670,4 @@ static void send_cached_file(Request* request, int client_socket, FileCache* cac
     } else if (strcmp(request->method, HTTP_HEAD) == 0) {
         request->bytes = 0;
     }        
-}
-
-static void end_connection(Request* request, int client_socket) {
-    close_socket(client_socket);
-    free_request(request);
 }

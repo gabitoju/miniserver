@@ -79,6 +79,7 @@ int cgi_handle_request(Request* request, int client_socket, const char* script_p
         setenv("SERVER_NAME", request->host ? request->host : "", 1);
         setenv("SERVER_PORT", port, 1);
         setenv("REMOTE_ADDR", request->client_ip ? request->client_ip : "", 1);
+        setenv("HTTP_X_REQUEST_ID", request->request_id, 1);
 
         if (request->has_content_length) {
             char content_length[32];
@@ -239,6 +240,8 @@ static int cgi_send_response(Request* request, int client_socket, char* output, 
             if (endptr == value || *endptr != '\0' || length != body_size) {
                 return -1;
             }
+        } else if (cgi_header_value(line, "X-Request-ID") != NULL) {
+            continue;
         } else if (cgi_header_value(line, "Connection") != NULL || cgi_header_value(line, "Transfer-Encoding") != NULL) {
             return -1;
         } else {
@@ -253,7 +256,7 @@ static int cgi_send_response(Request* request, int client_socket, char* output, 
 
     size_t body_size = output_size - (size_t)(header_end - output);
     char headers[BUFFER_SIZE * 2];
-    size_t headers_size = response_build_headers(headers, sizeof(headers), content_type, status_line, body_size, request->close_connection, extra_headers, extra_count);
+    size_t headers_size = response_build_headers(headers, sizeof(headers), content_type, status_line, body_size, request->close_connection, extra_headers, extra_count, request->request_id);
     if (cgi_send_all(client_socket, headers, headers_size) == -1) {
         return -1;
     }

@@ -11,6 +11,7 @@ A simple, multi-process HTTP/1.1 server written in C. It is designed to be small
 *   **External Configuration:** All settings are managed via a simple `server.conf` file, including port, content path, and log file locations.
 *   **MIME Type Support:** Dynamically loads MIME types from a `mime.types` file to serve content with the correct `Content-Type` header.
 *   **Logging:** Provides separate, configurable log files for access and error reporting.
+*   **Request Observability:** Assigns each request a safe request ID, returns it as `X-Request-ID`, and records final status plus monotonic request duration in the access log.
 *   **ETag Support:** Generates and validates ETags for cache control, supporting `304 Not Modified` responses.
 *   **POST Request Handling:** Safely receives request bodies with a configurable size limit and acknowledges generic `POST` requests.
 *   **CGI Support:** Runs configured script extensions through POSIX CGI executables. Scripts are identified by the standard `SCRIPT_FILENAME` environment variable.
@@ -125,6 +126,23 @@ Run the server with the following command, making sure to specify the configurat
 
 ```sh
 srvd -c /etc/srv/server.conf
+```
+
+### Request IDs and access logs
+
+Every request receives an `X-Request-ID` response header. A non-empty inbound
+header using only letters, digits, `.`, `_`, and `-` (up to 63 characters) is
+preserved; otherwise the server generates a random ID. CGI programs receive
+the same value through `HTTP_X_REQUEST_ID`.
+
+Access log lines retain the existing request information and append
+`request_id=<id>` and `duration_ms=<milliseconds>`. Duration is measured with
+the monotonic clock and is reset for every request on a keep-alive connection.
+
+Run the focused check with:
+
+```sh
+bash test_request_logging.sh
 ```
 
 ## Stress Testing

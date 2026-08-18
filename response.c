@@ -11,7 +11,8 @@ size_t response_build_headers(
     size_t content_length, 
     int connection_close, 
     const char** extra_headers, 
-    size_t extra_count
+    size_t extra_count,
+    const char* request_id
 ) {
     size_t total = 0;
 
@@ -23,6 +24,9 @@ size_t response_build_headers(
         n = snprintf(buffer + total, buffer_size - total, "%s\r\n", extra_headers[i]);
         total += (n > 0) ? n : 0;
     }
+
+    n = snprintf(buffer + total, buffer_size - total, "X-Request-ID: %s\r\n", request_id ? request_id : "");
+    total += (n > 0) ? n : 0;
 
     const char* charset = strchr(content_type, ';') ? "" : "; charset=utf-8";
     n = snprintf(buffer + total, buffer_size - total, 
